@@ -32,6 +32,9 @@ class Player(object):
             of 0 if both player and dealer have black jack
             or -bet if player lost
         """
+        print(prize)
+        print(self.table)
+        print(prize - self.table)
         self.table = 0
         self.pocket += prize
 
