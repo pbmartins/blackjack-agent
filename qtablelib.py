@@ -1,5 +1,3 @@
-import numpy
-# may be eliminated on the future
 from functools import reduce
 
 # state tuple: (player_total, player_ace_usable_as_11, dealer_total, dealer_ace_usable_as_11)
@@ -9,21 +7,14 @@ from functools import reduce
 # Create all possible states list
 def create_states():
     # Versions considering aces
-    state_tuple = lambda pt, dt: [(pt, False, dt, False), (pt, True, dt, False), \
-            (pt, False, dt, True), (pt, True, dt, True)]
+    #state_tuple = lambda pt, dt: [(pt, False, dt, False), (pt, True, dt, False), \
+    #        (pt, False, dt, True), (pt, True, dt, True)]
+    # Version not considering aces
+    state_tuple = lambda pt, dt: [(pt, dt)]
     states = [state_tuple(player_total, dealer_total) \
             for player_total in range(11, 21) for dealer_total in range(1, 21)]
     return reduce(lambda a, b: a + b, states, [])
-
-    #states = []
-    #for player_total in range(11, 22):          # Player total - we hit until 11
-    #    for dealer_total in range(1, 21):       # Dealer can have a total between 1 and 20
-    #        states += [(player_total, False, dealer_total), \
-    #                (player_total, True, dealer_total)]
-    #return states
-
-    #####################
-    #Versions not considering aces since card.value() knows the value in hand
+    
 
 # Create dictionary of all possible state-actions (state, action) and their values
 # and will create Q-value table

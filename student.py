@@ -6,7 +6,7 @@ import numpy
 from player import Player
 
 class StudentPlayer(Player):
-    def __init__(self, name="Meu nome", money=0, eps=0.0, total_games=100000):
+    def __init__(self, name="Meu nome", money=0, eps=1.0, total_games=100000):
         super(StudentPlayer, self).__init__(name, money)
         # Create tables to save state-action average rewards
         self.results = {}
@@ -16,15 +16,15 @@ class StudentPlayer(Player):
 
         # Load tables from files
         # Uncomment to load them
-        self.qtable = numpy.load('table_f.npy').item()
-        self.counting_table = numpy.load('count_f.npy').item()
+        self.qtable = numpy.load('table_2tuple.npy').item()
+        self.counting_table = numpy.load('count_2tuple.npy').item()
 
         self.total_games = self.games_left = total_games
         self.eps = eps
 
         # Betting system
         self.bet_pivot = money
-        self.bet_value = 2
+        self.bet_value = 1
         self.defeats = 0
         self.max_defeat = 7
         self.result = 0
@@ -48,9 +48,13 @@ class StudentPlayer(Player):
 
 
         if(dealer_value >= 21):
-            return "s"
+            print("DEALER VALUE: " + str(dealer_value))
+            # The ace will be counted as 1, because there's stil a card to show
+            dealer_value -= 10
+            #return "s"
 
-        state = (player_value, player_ace, dealer_value, dealer_ace)
+        #state = (player_value, player_ace, dealer_value, dealer_ace)
+        state = (player_value, dealer_value)
         # If random value is less than epsilon, play randomly (0 - stand, 1 - hit)
         # Else access qtable and search for the best probability based on state-action
         if(random.random() < self.eps):
@@ -58,6 +62,7 @@ class StudentPlayer(Player):
         else:
             probabilities = [self.qtable[(state, 0)], self.qtable[(state, 1)]] 
             action = probabilities.index(max(probabilities))
+            print("state = {state}, prob = {prob}, action = {action}".format(state=state, prob=probabilities, action=action))
 
         # Update counting table and create state-action entry on results dict
         state_action = (state, action)
@@ -81,28 +86,42 @@ class StudentPlayer(Player):
         #        self.bet_value = 2
         #return self.bet_value 
 
-        ###########################
+        ##########################
         # Hard-core betting system
-        if self.pocket <= 70:
-            self.bet_value = 1
-        elif self.pocket >= 150:
-            self.bet_value = 5
-        else:
-            self.bet_value = 3
-        return self.bet_value
+        #if self.pocket <= 85:
+        #    self.bet_value = 1
+        #elif self.pocket >= 120:
+        #    self.bet_value = 5
+        #else:
+        #    self.bet_value = 4
+        #return self.bet_value
 
-        #return 1
+        ##########################
+        # 1-3-2-6 System
+        #bets = [1, 3, 2, 6]
+        #if self.result:
+        #    self.bet_value = (self.bet_value + 1) % len(bets)
+        #else:
+        #    self.bet_value = 0
+        #return bets[self.bet_value]
+        
+        ##########################
+        # Parlay System
+        #parlay = lambda n: round(2 * n - 0.85 * n) if n < 5 else 5
+        #if self.result:
+        #    self.bet_value += 1
+        #else:
+        #    self.bet_value = 1
+        #return parlay(self.bet_value)
+
+        return 1
+
 
     def payback(self, prize):
         # After running some tests, I've undestood that the prize gives the result
         self.result = 0
         if prize != 0:
             self.result = -1 if prize < 0 else 1
-        #self.result = -1
-        #if prize - self.table > 0:
-        #    self.result = 1
-        #elif prize-self.table == 0:
-        #    self.result = 0
 
         # For every state-action in the current game, registry the game final result
         for state_action in self.results:
@@ -113,12 +132,12 @@ class StudentPlayer(Player):
 
         # Save tables to files
         # Uncomment to save
-        #numpy.save('table_f.npy', self.qtable)
-        #numpy.save('count_f.npy', self.counting_table)
+        #numpy.save('table_2tuple.npy', self.qtable)
+        #numpy.save('count_2tuple.npy', self.counting_table)
 
         # Update game values
         self.table = 0
         self.pocket += prize
         self.results = {}
-        #self.games_left -= 1
+        self.games_left -= 1
         #self.eps = self.games_left / self.total_games
