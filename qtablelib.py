@@ -7,7 +7,7 @@ from functools import reduce
 # Create all possible states list
 def create_states():
     # Versions considering aces
-    #state_tuple = lambda pt, dt: [(pt, False, dt, False), (pt, True, dt, False), \
+    # state_tuple = lambda pt, dt: [(pt, False, dt, False), (pt, True, dt, False), \
     #        (pt, False, dt, True), (pt, True, dt, True)]
     # Version not considering aces
     state_tuple = lambda pt, dt: [(pt, dt)]

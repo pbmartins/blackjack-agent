@@ -6,21 +6,23 @@ import numpy
 from player import Player
 
 class StudentPlayer(Player):
-    def __init__(self, name="Meu nome", money=0, eps=1.0, total_games=100000):
+    def __init__(self, name="Meu nome", money=0, eps=0.1, create=True):
         super(StudentPlayer, self).__init__(name, money)
+        self.create = create
+        self.total_games = self.games_left = 100000
+        self.eps = eps
+
         # Create tables to save state-action average rewards
         self.results = {}
         self.states = q.create_states()
-        #self.qtable = q.create_qtable(self.states)
-        #self.counting_table = q.create_counting_table(self.qtable)
 
-        # Load tables from files
-        # Uncomment to load them
-        self.qtable = numpy.load('table_2tuple.npy').item()
-        self.counting_table = numpy.load('count_2tuple.npy').item()
-
-        self.total_games = self.games_left = total_games
-        self.eps = eps
+        if create:
+            self.qtable = q.create_qtable(self.states)
+            self.counting_table = q.create_counting_table(self.qtable)
+        else:
+            self.qtable = numpy.load('qtable.npy').item()
+            self.counting_table = numpy.load('countingtable.npy').item()
+            self.eps = 1.0
 
         # Betting system
         self.bet_pivot = money
@@ -46,15 +48,12 @@ class StudentPlayer(Player):
         #       don't go over the 21 limit, even if the third card is a Jack, and then, \
         #       the ace will be considered 1 and not 11, as we thought initially
 
-
-        if(dealer_value >= 21):
-            print("DEALER VALUE: " + str(dealer_value))
-            # The ace will be counted as 1, because there's stil a card to show
+        # The ace will be counted as 1, because there's stil a card to show
+        if dealer_value >= 21:
             dealer_value -= 10
-            #return "s"
 
-        #state = (player_value, player_ace, dealer_value, dealer_ace)
         state = (player_value, dealer_value)
+
         # If random value is less than epsilon, play randomly (0 - stand, 1 - hit)
         # Else access qtable and search for the best probability based on state-action
         if(random.random() < self.eps):
@@ -62,7 +61,8 @@ class StudentPlayer(Player):
         else:
             probabilities = [self.qtable[(state, 0)], self.qtable[(state, 1)]] 
             action = probabilities.index(max(probabilities))
-            print("state = {state}, prob = {prob}, action = {action}".format(state=state, prob=probabilities, action=action))
+            print("state = {state}, prob = {prob}, action = {action}".format(state=state, \ 
+                prob=probabilities, action=action))
 
         # Update counting table and create state-action entry on results dict
         state_action = (state, action)
@@ -118,10 +118,15 @@ class StudentPlayer(Player):
 
 
     def payback(self, prize):
-        # After running some tests, I've undestood that the prize gives the result
         self.result = 0
         if prize != 0:
             self.result = -1 if prize < 0 else 1
+
+        # Update game values
+        self.table = 0
+        self.pocket += prize
+        self.results = {}
+        self.games_left -= 1
 
         # For every state-action in the current game, registry the game final result
         for state_action in self.results:
@@ -130,14 +135,7 @@ class StudentPlayer(Player):
         # Update qtable with the results of the current game
         self.qtable = q.update_qtable(self.qtable, self.counting_table, self.results)
 
-        # Save tables to files
-        # Uncomment to save
-        #numpy.save('table_2tuple.npy', self.qtable)
-        #numpy.save('count_2tuple.npy', self.counting_table)
-
-        # Update game values
-        self.table = 0
-        self.pocket += prize
-        self.results = {}
-        self.games_left -= 1
-        #self.eps = self.games_left / self.total_games
+        if self.create:
+            numpy.save('qtable.npy', self.qtable)
+            numpy.save('countingtable.npy', self.counting_table)
+            self.eps = self.games_left / self.total_games
