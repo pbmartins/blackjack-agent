@@ -6,7 +6,7 @@ import numpy
 from player import Player
 
 class StudentPlayer(Player):
-    def __init__(self, name="Meu nome", money=0, eps=0.1, create=True):
+    def __init__(self, name="Meu nome", money=0, eps=0.1, create=False):
         super(StudentPlayer, self).__init__(name, money)
         self.create = create
         self.total_games = self.games_left = 100000
@@ -16,13 +16,13 @@ class StudentPlayer(Player):
         self.results = {}
         self.states = q.create_states()
 
-        if create:
+        if self.create:
             self.qtable = q.create_qtable(self.states)
             self.counting_table = q.create_counting_table(self.qtable)
+            self.eps = 1.0
         else:
             self.qtable = numpy.load('qtable.npy').item()
             self.counting_table = numpy.load('countingtable.npy').item()
-            self.eps = 1.0
 
         # Betting system
         self.bet_pivot = money
@@ -61,8 +61,7 @@ class StudentPlayer(Player):
         else:
             probabilities = [self.qtable[(state, 0)], self.qtable[(state, 1)]] 
             action = probabilities.index(max(probabilities))
-            print("state = {state}, prob = {prob}, action = {action}".format(state=state, \ 
-                prob=probabilities, action=action))
+            print("state = {state}, prob = {prob}, action = {action}".format(state=state, prob=probabilities, action=action))
 
         # Update counting table and create state-action entry on results dict
         state_action = (state, action)
