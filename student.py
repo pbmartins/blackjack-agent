@@ -3,12 +3,13 @@ import card
 import random
 import qtablelib as q
 import numpy
+import math
 from player import Player
 
 class StudentPlayer(Player):
-    def __init__(self, name="Meu nome", money=0, eps=0.1, create=False):
+    def __init__(self, name="Meu nome", money=0, eps=0.0, create_table=False):
         super(StudentPlayer, self).__init__(name, money)
-        self.create = create
+        self.create = create_table
         self.total_games = self.games_left = 100000
         self.eps = eps
 
@@ -65,6 +66,7 @@ class StudentPlayer(Player):
 
         # Update counting table and create state-action entry on results dict
         state_action = (state, action)
+        self.sa = state_action
         self.results[state_action] = 0
         self.counting_table[state_action] += 1
 
@@ -113,6 +115,24 @@ class StudentPlayer(Player):
         #    self.bet_value = 1
         #return parlay(self.bet_value)
 
+        #########################
+        # Based on average reward bet
+        #max_bet = 5
+        #hand = [p.hand for p in players if p.player.name == self.name][0]
+        #print(hand)
+        #player_value = card.value(hand)
+        #dealer_value = card.value(dealer.hand)
+        #if dealer_value >= 21:
+        #    dealer_value -= 10
+
+        #state = (player_value, dealer_value)
+        #probabilities = [self.qtable[(state, 0)], self.qtable[(state, 1)]] 
+        #action = probabilities.index(max(probabilities))
+        #sa = (state, action)
+
+        #return 1 if self.qtable[sa] <= 0 \
+        #        else math.ceil(self.qtable[sa] * (max_bet + 1))
+        
         return 1
 
 
@@ -121,12 +141,6 @@ class StudentPlayer(Player):
         if prize != 0:
             self.result = -1 if prize < 0 else 1
 
-        # Update game values
-        self.table = 0
-        self.pocket += prize
-        self.results = {}
-        self.games_left -= 1
-
         # For every state-action in the current game, registry the game final result
         for state_action in self.results:
             self.results[state_action] = self.result
@@ -134,7 +148,13 @@ class StudentPlayer(Player):
         # Update qtable with the results of the current game
         self.qtable = q.update_qtable(self.qtable, self.counting_table, self.results)
 
+        # Update game values
+        self.table = 0
+        self.pocket += prize
+        self.results = {}
+        self.games_left -= 1
+        
         if self.create:
             numpy.save('qtable.npy', self.qtable)
             numpy.save('countingtable.npy', self.counting_table)
-            self.eps = self.games_left / self.total_games
+            self.eps = self.games_left / (self.total_games * 2)
