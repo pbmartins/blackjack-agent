@@ -21,9 +21,9 @@ def create_states():
 def create_qtable(states):
     qtable = {}
     for state in states:
-        #qtable[(state, 's')] = qtable[(state, 'h')] = \
-        #        qtable[(state, 'd')] = qtable[(state, 'u')] = 0.0
-        qtable[(state, 's')] = qtable[(state, 'h')] = 0.0
+        qtable[(state, 's')] = qtable[(state, 'h')] = \
+                qtable[(state, 'd')] = qtable[(state, 'u')] = 0.0
+        #qtable[(state, 's')] = qtable[(state, 'h')] = 0.0
     return qtable
 
 # Setup a dictionary of state-actions to record how many times we've experienced

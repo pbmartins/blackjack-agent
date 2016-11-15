@@ -7,15 +7,18 @@ import math
 from player import Player
 
 class StudentPlayer(Player):
-    def __init__(self, name="Meu nome", money=0, eps=0.0, create_table=False):
+    def __init__(self, name="Meu nome", money=0):
         super(StudentPlayer, self).__init__(name, money)
-        self.create = create_table
-        self.total_games = self.games_left = 100000
-        self.eps = eps
-        self.turn = 0;
+        self.create = True
+        self.total_games = self.games_left = 1000000
+        self.eps = 0.0
+        self.turn = 0
         self.plays = ['s', 'h', 'd', 'u']
+        self.wins = 0
 
         # Create tables to save state-action average rewards
+        self.qtable_fname = 'qtable_1M.npy'
+        self.ctable_fname = 'countingtable_1M.npy'
         self.results = {}
         self.states = q.create_states()
 
@@ -24,8 +27,8 @@ class StudentPlayer(Player):
             self.counting_table = q.create_counting_table(self.qtable)
             self.eps = 1.0
         else:
-            self.qtable = numpy.load('qtable_2.npy').item()
-            self.counting_table = numpy.load('countingtable_2.npy').item()
+            self.qtable = numpy.load(self.qtable_fname).item()
+            self.counting_table = numpy.load(self.ctable_fname).item()
 
         # Betting system
 
@@ -65,28 +68,32 @@ class StudentPlayer(Player):
         # Else access qtable and search for the best probability based on state-action
         if(random.random() < self.eps):
             action = random.choice('sh')
-            print(action)
         else:
-            #probabilities = [self.qtable[(state, 's')], self.qtable[(state, 'h')],\
-            #        self.qtable[(state, 'u')]]
-            #if self.turn == 1:
-            #    probabilities += [self.qtable[(state, 'd')]]
-            probabilities = [self.qtable[(state, 's')], self.qtable[(state, 'h')]]
+            if self.turn == 1:
+                probabilities = [self.qtable[(state, 's')], self.qtable[(state, 'h')], \
+                        self.qtable[(state, 'd')], self.qtable[(state, 'u')]]
+            else:
+                probabilities = [self.qtable[(state, 's')], self.qtable[(state, 'h')],\
+                        -1.0, self.qtable[(state, 'u')]]
+
+            #probabilities = [self.qtable[(state, 's')], self.qtable[(state, 'h')]]
             prob = max(probabilities)
             action = self.plays[probabilities.index(prob)]
-            if self.turn == 1 and action == 'h' and prob > 0.5:
-                action = 'd'
-            elif prob < -0.5:
-                action = 'u'
-            print("state = {state}, prob = {prob}, action = {action}".format(state=state, prob=probabilities, action=action))
+            #if self.turn == 1 and action == 'h' and prob > 0.5:
+            #    action = 'd'
+            #elif self.turn != 1 and action == 'd':
+            #    action = 'h'
+            #elif prob < -0.5:
+            #    action = 'u'
+            #print("state = {state}, prob = {prob}, action = {action}".format(state=state, prob=probabilities, action=action))
 
-        newa = action
-        if action == 'd':
-            newa = 'h'
-        elif action == 'u':
-            newa = 's'
+        #newa = action
+        #if action == 'd':
+        #    newa = 'h'
+        #elif action == 'u':
+        #    newa = 's'
         # Update counting table and create state-action entry on results dict
-        state_action = (state, newa)
+        state_action = (state, action)
         self.sa = state_action
         self.results[state_action] = 0
         self.counting_table[state_action] += 1
@@ -164,6 +171,8 @@ class StudentPlayer(Player):
         if prize != 0:
             self.result = -1 if prize < 0 else 1
 
+        self.wins += 1 if self.result == 1 else 0
+
         # For every state-action in the current game, registry the game final result
         for state_action in self.results:
             self.results[state_action] = self.result
@@ -177,8 +186,12 @@ class StudentPlayer(Player):
         self.results = {}
         self.games_left -= 1
         self.turn = 0
+
+        if self.games_left == 0:
+            print("Number of victories: " + str(self.wins))
+            print("Pocket: " + str(self.pocket))
         
         if self.create:
-            numpy.save('qtable_2.npy', self.qtable)
-            numpy.save('countingtable_2.npy', self.counting_table)
+            numpy.save(self.qtable_fname, self.qtable)
+            numpy.save(self.ctable_fname, self.counting_table)
             self.eps = self.games_left / (self.total_games * 2)
