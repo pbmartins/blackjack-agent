@@ -2,7 +2,7 @@ from functools import reduce
 
 # state tuple: (player_total, player_ace_usable_as_11, dealer_total, dealer_ace_usable_as_11)
 # sa tuple : (state, action)
-#   action: 0 - stand, 1 - hit
+#   action: 0 - stand, 1 - hit, 2 - double-down, 3 - surrender
 
 # Create all possible states list
 def create_states():
@@ -21,7 +21,9 @@ def create_states():
 def create_qtable(states):
     qtable = {}
     for state in states:
-        qtable[(state, 0)] = qtable[(state, 1)] = 0.0
+        #qtable[(state, 's')] = qtable[(state, 'h')] = \
+        #        qtable[(state, 'd')] = qtable[(state, 'u')] = 0.0
+        qtable[(state, 's')] = qtable[(state, 'h')] = 0.0
     return qtable
 
 # Setup a dictionary of state-actions to record how many times we've experienced

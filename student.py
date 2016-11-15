@@ -12,6 +12,8 @@ class StudentPlayer(Player):
         self.create = create_table
         self.total_games = self.games_left = 100000
         self.eps = eps
+        self.turn = 0;
+        self.plays = ['s', 'h', 'd', 'u']
 
         # Create tables to save state-action average rewards
         self.results = {}
@@ -22,17 +24,21 @@ class StudentPlayer(Player):
             self.counting_table = q.create_counting_table(self.qtable)
             self.eps = 1.0
         else:
-            self.qtable = numpy.load('qtable.npy').item()
-            self.counting_table = numpy.load('countingtable.npy').item()
+            self.qtable = numpy.load('qtable_2.npy').item()
+            self.counting_table = numpy.load('countingtable_2.npy').item()
 
         # Betting system
+
         self.bet_pivot = money
         self.bet_value = 1
         self.defeats = 0
         self.max_defeat = 7
         self.result = 0
+        self.available = 20
 
     def play(self, dealer, players):
+        self.turn += 1
+
         hand = [p.hand for p in players if p.player.name == self.name][0]
         # If player's hand total is under 11, keep hitting
         if(card.value(hand)) < 11:
@@ -58,19 +64,34 @@ class StudentPlayer(Player):
         # If random value is less than epsilon, play randomly (0 - stand, 1 - hit)
         # Else access qtable and search for the best probability based on state-action
         if(random.random() < self.eps):
-            action = random.randint(0, 1)
+            action = random.choice('sh')
+            print(action)
         else:
-            probabilities = [self.qtable[(state, 0)], self.qtable[(state, 1)]] 
-            action = probabilities.index(max(probabilities))
+            #probabilities = [self.qtable[(state, 's')], self.qtable[(state, 'h')],\
+            #        self.qtable[(state, 'u')]]
+            #if self.turn == 1:
+            #    probabilities += [self.qtable[(state, 'd')]]
+            probabilities = [self.qtable[(state, 's')], self.qtable[(state, 'h')]]
+            prob = max(probabilities)
+            action = self.plays[probabilities.index(prob)]
+            if self.turn == 1 and action == 'h' and prob > 0.5:
+                action = 'd'
+            elif prob < -0.5:
+                action = 'u'
             print("state = {state}, prob = {prob}, action = {action}".format(state=state, prob=probabilities, action=action))
 
+        newa = action
+        if action == 'd':
+            newa = 'h'
+        elif action == 'u':
+            newa = 's'
         # Update counting table and create state-action entry on results dict
-        state_action = (state, action)
+        state_action = (state, newa)
         self.sa = state_action
         self.results[state_action] = 0
         self.counting_table[state_action] += 1
 
-        return "h" if action else "s"
+        return action
 
     def bet(self, dealer, players):
         # Pivot-base betting system
@@ -114,24 +135,26 @@ class StudentPlayer(Player):
         #else:
         #    self.bet_value = 1
         #return parlay(self.bet_value)
+        
+        #########################
+        # Incremental
+        #if self.result == 1:
+        #    self.bet_value = self.bet_value * 2 if self.bet_value * 2 <= 5 else 5
+        #else:
+        #    self.bet_value = 1
+        #return self.bet_value
 
         #########################
-        # Based on average reward bet
-        #max_bet = 5
-        #hand = [p.hand for p in players if p.player.name == self.name][0]
-        #print(hand)
-        #player_value = card.value(hand)
-        #dealer_value = card.value(dealer.hand)
-        #if dealer_value >= 21:
-        #    dealer_value -= 10
-
-        #state = (player_value, dealer_value)
-        #probabilities = [self.qtable[(state, 0)], self.qtable[(state, 1)]] 
-        #action = probabilities.index(max(probabilities))
-        #sa = (state, action)
-
-        #return 1 if self.qtable[sa] <= 0 \
-        #        else math.ceil(self.qtable[sa] * (max_bet + 1))
+        # Incremental with savings
+        #if self.available > 20:
+        #    self.available = 10
+        #elif self.available < 0:
+        #    return 1
+        #if self.result == 1:
+        #    self.bet_value = self.bet_value * 2 if self.bet_value * 2 <= 5 else 5
+        #else:
+        #    self.bet_value = 1
+        #return self.bet_value
         
         return 1
 
@@ -153,8 +176,9 @@ class StudentPlayer(Player):
         self.pocket += prize
         self.results = {}
         self.games_left -= 1
+        self.turn = 0
         
         if self.create:
-            numpy.save('qtable.npy', self.qtable)
-            numpy.save('countingtable.npy', self.counting_table)
+            numpy.save('qtable_2.npy', self.qtable)
+            numpy.save('countingtable_2.npy', self.counting_table)
             self.eps = self.games_left / (self.total_games * 2)
