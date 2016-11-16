@@ -12,14 +12,14 @@ class StudentPlayer(Player):
         self.create = False
         self.total_games = self.games_left = 1000
         self.turn = 0
-        self.plays = ['s', 'h', 'd', 'u']
+        self.plays = ['s', 'h', 'u', 'd']
         self.wins = 0
         self.defeats = 0
         self.draws = 0
 
         # Create tables to save state-action average rewards
-        self.qtable_fname = 'qtable_10M.npy'
-        self.ctable_fname = 'countingtable_10M.npy'
+        self.qtable_fname = 'qtable_200k.npy'
+        self.ctable_fname = 'countingtable_200k.npy'
         self.results = {}
         self.states = q.create_states()
 
@@ -42,8 +42,8 @@ class StudentPlayer(Player):
         #self.available = 20
 
     def play(self, dealer, players):
-        # Increment turn
-        self.turn += 1
+        # Increment turn (max turn: 5)
+        self.turn += 1 if self.turn < 4 else 0
         # Get player hand
         hand = [p.hand for p in players if p.player.name == self.name][0]
         # If player's hand total is under 11, keep hitting
@@ -65,9 +65,11 @@ class StudentPlayer(Player):
         if dealer_value >= 21:
             dealer_value -= 10
 
-        state = (player_value, dealer_value)
+        state = (player_value, dealer_value, self.turn)
         # Access qtable and search for the best probability based on state-action
-        probabilities = [self.qtable[(state, 's')], self.qtable[(state, 'h')]]
+        probabilities = [self.qtable[(state, 's')], \
+                self.qtable[(state, 'h')], self.qtable[(state, 'u')]]
+        probabilities += [self.qtable[(state, 'd')]] if self.turn == 1 else []
         prob = max(probabilities)
         action = self.plays[probabilities.index(prob)]
 
@@ -142,7 +144,7 @@ class StudentPlayer(Player):
         #    self.bet_value = 1
         #return self.bet_value
         
-        return 1
+        return 2
 
 
     def payback(self, prize):
