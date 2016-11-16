@@ -9,16 +9,17 @@ from player import Player
 class StudentPlayer(Player):
     def __init__(self, name="Meu nome", money=0):
         super(StudentPlayer, self).__init__(name, money)
-        self.create = True
-        self.total_games = self.games_left = 1000000
+        self.create = False
+        self.total_games = self.games_left = 1000
         self.eps = 0.0
         self.turn = 0
         self.plays = ['s', 'h', 'd', 'u']
         self.wins = 0
+        self.result = 0
 
         # Create tables to save state-action average rewards
-        self.qtable_fname = 'qtable_1M.npy'
-        self.ctable_fname = 'countingtable_1M.npy'
+        self.qtable_fname = 'qtable_2M.npy'
+        self.ctable_fname = 'countingtable_2M.npy'
         self.results = {}
         self.states = q.create_states()
 
@@ -31,26 +32,27 @@ class StudentPlayer(Player):
             self.counting_table = numpy.load(self.ctable_fname).item()
 
         # Betting system
+        
+        #self.bet_pivot = money
+        #self.bet_value = 1
+        #self.defeats = 0
+        #self.max_defeat = 7
 
-        self.bet_pivot = money
-        self.bet_value = 1
-        self.defeats = 0
-        self.max_defeat = 7
-        self.result = 0
-        self.available = 20
+        #self.available = 20
 
     def play(self, dealer, players):
+        # Increment turn
         self.turn += 1
-
+        # Get player hand
         hand = [p.hand for p in players if p.player.name == self.name][0]
         # If player's hand total is under 11, keep hitting
         if(card.value(hand)) < 11:
             return "h"
 
         player_value = card.value(hand)
-        player_ace = len([c for c in hand if c.is_ace()]) >= 1
+        #player_ace = len([c for c in hand if c.is_ace()]) >= 1
         dealer_value = card.value(dealer.hand)
-        dealer_ace = len([c for c in dealer.hand if c.is_ace()]) >= 1
+        #dealer_ace = len([c for c in dealer.hand if c.is_ace()]) >= 1
 
         # There's something tricky here, example:
         #   Dealer's hand: 2, ace, hidden
@@ -67,31 +69,23 @@ class StudentPlayer(Player):
         # If random value is less than epsilon, play randomly (0 - stand, 1 - hit)
         # Else access qtable and search for the best probability based on state-action
         if(random.random() < self.eps):
-            action = random.choice('sh')
+            action = random.choice('shdu') if self.turn == 1 else random.choice('shu')
         else:
-            if self.turn == 1:
-                probabilities = [self.qtable[(state, 's')], self.qtable[(state, 'h')], \
-                        self.qtable[(state, 'd')], self.qtable[(state, 'u')]]
-            else:
-                probabilities = [self.qtable[(state, 's')], self.qtable[(state, 'h')],\
-                        -1.0, self.qtable[(state, 'u')]]
+            dd = self.qtable[(state, 'd')] if self.turn == 1 else -1.0
+            rewards = [self.qtable[(state, 's')], self.qtable[(state, 'h')], \
+                    dd, self.qtable[(state, 'u')]]
+            #rewards = [self.qtable[(state, 's')], self.qtable[(state, 'h')]]
 
-            #probabilities = [self.qtable[(state, 's')], self.qtable[(state, 'h')]]
-            prob = max(probabilities)
-            action = self.plays[probabilities.index(prob)]
-            #if self.turn == 1 and action == 'h' and prob > 0.5:
-            #    action = 'd'
-            #elif self.turn != 1 and action == 'd':
-            #    action = 'h'
-            #elif prob < -0.5:
-            #    action = 'u'
+            avg_reward = max(rewards)
+            action = self.plays[rewards.index(avg_reward)]
+            
+            if self.turn == 1 and action == 'h' and avg_reward > 0.7:
+                action = 'd'
+            if avg_reward < -0.5:
+                action = 'u'
+
             #print("state = {state}, prob = {prob}, action = {action}".format(state=state, prob=probabilities, action=action))
 
-        #newa = action
-        #if action == 'd':
-        #    newa = 'h'
-        #elif action == 'u':
-        #    newa = 's'
         # Update counting table and create state-action entry on results dict
         state_action = (state, action)
         self.sa = state_action
@@ -170,7 +164,6 @@ class StudentPlayer(Player):
         self.result = 0
         if prize != 0:
             self.result = -1 if prize < 0 else 1
-
         self.wins += 1 if self.result == 1 else 0
 
         # For every state-action in the current game, registry the game final result
@@ -190,8 +183,9 @@ class StudentPlayer(Player):
         if self.games_left == 0:
             print("Number of victories: " + str(self.wins))
             print("Pocket: " + str(self.pocket))
-        
+       
         if self.create:
+            print(self.total_games - self.games_left)
             numpy.save(self.qtable_fname, self.qtable)
             numpy.save(self.ctable_fname, self.counting_table)
             self.eps = self.games_left / (self.total_games * 2)

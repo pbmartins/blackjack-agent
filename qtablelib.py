@@ -1,15 +1,11 @@
 from functools import reduce
 
-# state tuple: (player_total, player_ace_usable_as_11, dealer_total, dealer_ace_usable_as_11)
+# state tuple: (player_total, dealer_total)
 # sa tuple : (state, action)
-#   action: 0 - stand, 1 - hit, 2 - double-down, 3 - surrender
+#   action: s - stand, h - hit, d - double-down, u - surrender
 
 # Create all possible states list
 def create_states():
-    # Versions considering aces
-    # state_tuple = lambda pt, dt: [(pt, False, dt, False), (pt, True, dt, False), \
-    #        (pt, False, dt, True), (pt, True, dt, True)]
-    # Version not considering aces
     state_tuple = lambda pt, dt: [(pt, dt)]
     states = [state_tuple(player_total, dealer_total) \
             for player_total in range(11, 21) for dealer_total in range(1, 21)]
