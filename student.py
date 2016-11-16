@@ -11,15 +11,15 @@ class StudentPlayer(Player):
         super(StudentPlayer, self).__init__(name, money)
         self.create = False
         self.total_games = self.games_left = 1000
-        self.eps = 0.0
         self.turn = 0
         self.plays = ['s', 'h', 'd', 'u']
         self.wins = 0
-        self.result = 0
+        self.defeats = 0
+        self.draws = 0
 
         # Create tables to save state-action average rewards
-        self.qtable_fname = 'qtable_2M.npy'
-        self.ctable_fname = 'countingtable_2M.npy'
+        self.qtable_fname = 'qtable_10M.npy'
+        self.ctable_fname = 'countingtable_10M.npy'
         self.results = {}
         self.states = q.create_states()
 
@@ -27,6 +27,7 @@ class StudentPlayer(Player):
             self.qtable = q.create_qtable(self.states)
             self.counting_table = q.create_counting_table(self.qtable)
             self.eps = 1.0
+            self.total_games = self.games_left = 200000
         else:
             self.qtable = numpy.load(self.qtable_fname).item()
             self.counting_table = numpy.load(self.ctable_fname).item()
@@ -65,26 +66,10 @@ class StudentPlayer(Player):
             dealer_value -= 10
 
         state = (player_value, dealer_value)
-
-        # If random value is less than epsilon, play randomly (0 - stand, 1 - hit)
-        # Else access qtable and search for the best probability based on state-action
-        if(random.random() < self.eps):
-            action = random.choice('shdu') if self.turn == 1 else random.choice('shu')
-        else:
-            dd = self.qtable[(state, 'd')] if self.turn == 1 else -1.0
-            rewards = [self.qtable[(state, 's')], self.qtable[(state, 'h')], \
-                    dd, self.qtable[(state, 'u')]]
-            #rewards = [self.qtable[(state, 's')], self.qtable[(state, 'h')]]
-
-            avg_reward = max(rewards)
-            action = self.plays[rewards.index(avg_reward)]
-            
-            if self.turn == 1 and action == 'h' and avg_reward > 0.7:
-                action = 'd'
-            if avg_reward < -0.5:
-                action = 'u'
-
-            #print("state = {state}, prob = {prob}, action = {action}".format(state=state, prob=probabilities, action=action))
+        # Access qtable and search for the best probability based on state-action
+        probabilities = [self.qtable[(state, 's')], self.qtable[(state, 'h')]]
+        prob = max(probabilities)
+        action = self.plays[probabilities.index(prob)]
 
         # Update counting table and create state-action entry on results dict
         state_action = (state, action)
@@ -163,8 +148,14 @@ class StudentPlayer(Player):
     def payback(self, prize):
         self.result = 0
         if prize != 0:
-            self.result = -1 if prize < 0 else 1
+            self.result = 0 if prize < 0 else 1
+        else:
+            self.result = 0.5
+
         self.wins += 1 if self.result == 1 else 0
+        self.defeats += 1 if self.result == 0 else 0
+        self.draws += 1 if self.result == 0.5 else 0
+
 
         # For every state-action in the current game, registry the game final result
         for state_action in self.results:
@@ -182,6 +173,8 @@ class StudentPlayer(Player):
 
         if self.games_left == 0:
             print("Number of victories: " + str(self.wins))
+            print("Number of defeats: " + str(self.defeats))
+            print("Number of draws: " + str(self.draws))
             print("Pocket: " + str(self.pocket))
        
         if self.create:

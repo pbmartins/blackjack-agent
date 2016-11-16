@@ -1,3 +1,4 @@
+import random
 from functools import reduce
 
 # state tuple: (player_total, dealer_total)
@@ -17,9 +18,8 @@ def create_states():
 def create_qtable(states):
     qtable = {}
     for state in states:
-        qtable[(state, 's')] = qtable[(state, 'h')] = \
-                qtable[(state, 'd')] = qtable[(state, 'u')] = 0.0
-        #qtable[(state, 's')] = qtable[(state, 'h')] = 0.0
+        qtable[(state, 's')] = random.uniform(0.49, 0.51) 
+        qtable[(state, 'h')] = random.uniform(0.49, 0.51)
     return qtable
 
 # Setup a dictionary of state-actions to record how many times we've experienced
@@ -27,12 +27,12 @@ def create_qtable(states):
 def create_counting_table(qtable):
     counting_table = {}
     for state_action in qtable:
-        counting_table[state_action] = 0
+        counting_table[state_action] = 1
     return counting_table
 
 # Recalculate the average reward for our Q-value table
 def update_qtable(qtable, counting_table, results):
     for sa in results:
-        qtable[sa] = qtable[sa] + (results[sa] - qtable[sa]) / counting_table[sa]
+        qtable[sa] = qtable[sa] + ((results[sa] - qtable[sa]) / counting_table[sa])
     return qtable
 

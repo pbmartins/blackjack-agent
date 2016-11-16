@@ -12,7 +12,7 @@ def main():
         #g = Game(players, debug=True)
         g.run()
 
-    #print("OVERALL: ", players)
+    print("OVERALL: ", players)
 
 if __name__ == '__main__':
     main()
