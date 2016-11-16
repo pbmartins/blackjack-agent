@@ -11,14 +11,15 @@ class StudentPlayer(Player):
         super(StudentPlayer, self).__init__(name, money)
         self.create = False
         self.total_games = self.games_left = 1000
-        self.eps = 0.0
         self.turn = 0
         self.plays = ['s', 'h', 'd', 'u']
         self.wins = 0
+        self.defeats = 0
+        self.draws = 0
 
         # Create tables to save state-action average rewards
-        self.qtable_fname = 'qtable.npy'
-        self.ctable_fname = 'countingtable.npy'
+        self.qtable_fname = 'qtable_0.49-0.51.npy'
+        self.ctable_fname = 'countingtable_0.59-0.51.npy'
         self.results = {}
         self.states = q.create_states()
 
@@ -26,6 +27,7 @@ class StudentPlayer(Player):
             self.qtable = q.create_qtable(self.states)
             self.counting_table = q.create_counting_table(self.qtable)
             self.eps = 1.0
+            self.total_games = self.games_left = 200000
         else:
             self.qtable = numpy.load(self.qtable_fname).item()
             self.counting_table = numpy.load(self.ctable_fname).item()
@@ -34,7 +36,6 @@ class StudentPlayer(Player):
 
         self.bet_pivot = money
         self.bet_value = 1
-        self.defeats = 0
         self.max_defeat = 7
         self.result = 0
         self.available = 20
@@ -48,9 +49,9 @@ class StudentPlayer(Player):
             return "h"
 
         player_value = card.value(hand)
-        player_ace = len([c for c in hand if c.is_ace()]) >= 1
+        #player_ace = len([c for c in hand if c.is_ace()]) >= 1
         dealer_value = card.value(dealer.hand)
-        dealer_ace = len([c for c in dealer.hand if c.is_ace()]) >= 1
+        #dealer_ace = len([c for c in dealer.hand if c.is_ace()]) >= 1
 
         # There's something tricky here, example:
         #   Dealer's hand: 2, ace, hidden
@@ -64,34 +65,11 @@ class StudentPlayer(Player):
 
         state = (player_value, dealer_value)
 
-        # If random value is less than epsilon, play randomly (0 - stand, 1 - hit)
-        # Else access qtable and search for the best probability based on state-action
-        #if(random.random() < self.eps):
-        #    action = random.choice('sh')
-        #else:
-        #if self.turn == 1:
-        #    probabilities = [self.qtable[(state, 's')], self.qtable[(state, 'h')], \
-        #            self.qtable[(state, 'd')], self.qtable[(state, 'u')]]
-        #else:
+        # Access qtable and search for the best probability based on state-action
         probabilities = [self.qtable[(state, 's')], self.qtable[(state, 'h')]]
-                    #-1.0, self.qtable[(state, 'u')]]
-
-        #probabilities = [self.qtable[(state, 's')], self.qtable[(state, 'h')]]
         prob = max(probabilities)
         action = self.plays[probabilities.index(prob)]
-            #if self.turn == 1 and action == 'h' and prob > 0.5:
-            #    action = 'd'
-            #elif self.turn != 1 and action == 'd':
-            #    action = 'h'
-            #elif prob < -0.5:
-            #    action = 'u'
-            #print("state = {state}, prob = {prob}, action = {action}".format(state=state, prob=probabilities, action=action))
 
-        #newa = action
-        #if action == 'd':
-        #    newa = 'h'
-        #elif action == 'u':
-        #    newa = 's'
         # Update counting table and create state-action entry on results dict
         state_action = (state, action)
         self.sa = state_action
@@ -170,8 +148,13 @@ class StudentPlayer(Player):
         self.result = 0
         if prize != 0:
             self.result = 0 if prize < 0 else 1
+        else:
+            self.result = 0.5
 
         self.wins += 1 if self.result == 1 else 0
+        self.defeats += 1 if self.result == 0 else 0
+        self.draws += 1 if self.result == 0.5 else 0
+
 
         # For every state-action in the current game, registry the game final result
         for state_action in self.results:
@@ -189,6 +172,8 @@ class StudentPlayer(Player):
 
         if self.games_left == 0:
             print("Number of victories: " + str(self.wins))
+            print("Number of defeats: " + str(self.defeats))
+            print("Number of draws: " + str(self.draws))
             print("Pocket: " + str(self.pocket))
         
         if self.create:
