@@ -9,7 +9,7 @@ from player import Player
 class StudentPlayer(Player):
     def __init__(self, name="Meu nome", money=0):
         super(StudentPlayer, self).__init__(name, money)
-        self.create = False
+        self.create = True
         self.total_games = self.games_left = 1000
         self.turn = 0
         self.plays = ['s', 'h', 'u', 'd']
@@ -18,8 +18,8 @@ class StudentPlayer(Player):
         self.draws = 0
 
         # Create tables to save state-action average rewards
-        self.qtable_fname = 'qtable_200k.npy'
-        self.ctable_fname = 'countingtable_200k.npy'
+        self.qtable_fname = 'qtable_10M_turns.npy'
+        self.ctable_fname = 'countingtable_10M_turns.npy'
         self.results = {}
         self.states = q.create_states()
 
@@ -27,7 +27,7 @@ class StudentPlayer(Player):
             self.qtable = q.create_qtable(self.states)
             self.counting_table = q.create_counting_table(self.qtable)
             self.eps = 1.0
-            self.total_games = self.games_left = 200000
+            self.total_games = self.games_left = 10000000
         else:
             self.qtable = numpy.load(self.qtable_fname).item()
             self.counting_table = numpy.load(self.ctable_fname).item()
