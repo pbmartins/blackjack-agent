@@ -9,16 +9,16 @@ from player import Player
 class StudentPlayer(Player):
     def __init__(self, name="Meu nome", money=0):
         super(StudentPlayer, self).__init__(name, money)
-        self.create = True
-        self.total_games = self.games_left = 1000000
+        self.create = False
+        self.total_games = self.games_left = 1000
         self.eps = 0.0
         self.turn = 0
         self.plays = ['s', 'h', 'd', 'u']
         self.wins = 0
 
         # Create tables to save state-action average rewards
-        self.qtable_fname = 'qtable_1M.npy'
-        self.ctable_fname = 'countingtable_1M.npy'
+        self.qtable_fname = 'qtable.npy'
+        self.ctable_fname = 'countingtable.npy'
         self.results = {}
         self.states = q.create_states()
 
@@ -66,19 +66,19 @@ class StudentPlayer(Player):
 
         # If random value is less than epsilon, play randomly (0 - stand, 1 - hit)
         # Else access qtable and search for the best probability based on state-action
-        if(random.random() < self.eps):
-            action = random.choice('sh')
-        else:
-            if self.turn == 1:
-                probabilities = [self.qtable[(state, 's')], self.qtable[(state, 'h')], \
-                        self.qtable[(state, 'd')], self.qtable[(state, 'u')]]
-            else:
-                probabilities = [self.qtable[(state, 's')], self.qtable[(state, 'h')],\
-                        -1.0, self.qtable[(state, 'u')]]
+        #if(random.random() < self.eps):
+        #    action = random.choice('sh')
+        #else:
+        #if self.turn == 1:
+        #    probabilities = [self.qtable[(state, 's')], self.qtable[(state, 'h')], \
+        #            self.qtable[(state, 'd')], self.qtable[(state, 'u')]]
+        #else:
+        probabilities = [self.qtable[(state, 's')], self.qtable[(state, 'h')]]
+                    #-1.0, self.qtable[(state, 'u')]]
 
-            #probabilities = [self.qtable[(state, 's')], self.qtable[(state, 'h')]]
-            prob = max(probabilities)
-            action = self.plays[probabilities.index(prob)]
+        #probabilities = [self.qtable[(state, 's')], self.qtable[(state, 'h')]]
+        prob = max(probabilities)
+        action = self.plays[probabilities.index(prob)]
             #if self.turn == 1 and action == 'h' and prob > 0.5:
             #    action = 'd'
             #elif self.turn != 1 and action == 'd':
@@ -169,7 +169,7 @@ class StudentPlayer(Player):
     def payback(self, prize):
         self.result = 0
         if prize != 0:
-            self.result = -1 if prize < 0 else 1
+            self.result = 0 if prize < 0 else 1
 
         self.wins += 1 if self.result == 1 else 0
 
