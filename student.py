@@ -1,55 +1,47 @@
 #encoding: utf8
 import card
 import random
-import qtablelib as q
+from qtablelib import Qtable
 import numpy
 import math
 from player import Player
+from collections import defaultdict
 
 class StudentPlayer(Player):
     def __init__(self, name="Meu nome", money=0):
         super(StudentPlayer, self).__init__(name, money)
-        self.create = True
-        self.total_games = self.games_left = 1000
-        self.turn = 0
+        self.create = False
+        self.total_games = self.games_left = 5000000 if self.create else 1000
         self.plays = ['s', 'h', 'u', 'd']
+        
+        # Counting stats
         self.wins = 0
         self.defeats = 0
         self.draws = 0
+        self.surrenders = 0
 
         # Create tables to save state-action average rewards
-        self.qtable_fname = 'qtable_10M_turns.npy'
-        self.ctable_fname = 'countingtable_10M_turns.npy'
+        self.tables = Qtable('tables/qtable_5M_sarsa.npy', \
+                'tables/ctable_5M_sarsa.npy', create=self.create)
+
+
+    def want_to_play(self, rules):
+        self.etrace = defaultdict(float)
         self.results = {}
-        self.states = q.create_states()
-
-        if self.create:
-            self.qtable = q.create_qtable(self.states)
-            self.counting_table = q.create_counting_table(self.qtable)
-            self.eps = 1.0
-            self.total_games = self.games_left = 10000000
-        else:
-            self.qtable = numpy.load(self.qtable_fname).item()
-            self.counting_table = numpy.load(self.ctable_fname).item()
-
-        # Betting system
-        
-        #self.bet_pivot = money
-        #self.bet_value = 1
-        #self.defeats = 0
-        #self.max_defeat = 7
-
-        #self.available = 20
+        self.turn = 0
+        return True
 
     def play(self, dealer, players):
-        # Increment turn (max turn: 5)
-        self.turn += 1 if self.turn < 4 else 0
         # Get player hand
         hand = [p.hand for p in players if p.player.name == self.name][0]
         # If player's hand total is under 11, keep hitting
         if(card.value(hand)) < 11:
             return "h"
 
+        # Increment turn
+        self.turn += 1
+
+        # Get players' totals
         player_value = card.value(hand)
         #player_ace = len([c for c in hand if c.is_ace()]) >= 1
         dealer_value = card.value(dealer.hand)
@@ -65,122 +57,63 @@ class StudentPlayer(Player):
         if dealer_value >= 21:
             dealer_value -= 10
 
-        state = (player_value, dealer_value, self.turn)
+        state = (player_value, dealer_value)
         # Access qtable and search for the best probability based on state-action
-        probabilities = [self.qtable[(state, 's')], \
-                self.qtable[(state, 'h')], self.qtable[(state, 'u')]]
-        probabilities += [self.qtable[(state, 'd')]] if self.turn == 1 else []
-        prob = max(probabilities)
-        action = self.plays[probabilities.index(prob)]
+        probabilities = [self.tables.qtable.get((state, 's'), 0.5), \
+                self.tables.qtable.get((state, 'h'), 0.5), \
+                self.tables.qtable.get((state, 'u'), 0.3)]
+        max_prob = max(probabilities)
+        action = self.plays[probabilities.index(max_prob)]
 
         # Update counting table and create state-action entry on results dict
-        state_action = (state, action)
-        self.sa = state_action
-        self.results[state_action] = 0
-        self.counting_table[state_action] += 1
+        self.next_sa = (state, action)
+        self.results[self.next_sa] = 0.5
+                
+        if self.turn > 1:
+            self.tables.update_tables(self.current_sa, self.next_sa, \
+                    self.results, self.etrace)
 
+        self.tables.ctable[self.next_sa] += 1
+        self.current_sa = self.next_sa
         return action
 
     def bet(self, dealer, players):
-        # Pivot-base betting system
-        #if self.pocket > self.bet_pivot:
-        #    self.bet_pivot = self.pocket
-        #    self.bet_value = 2
-        #elif self.result == 1:
-        #    self.bet_value = self.bet_value + 1 if self.bet_value < 5 else 5
-        #elif self.result == -1:
-        #    self.defeats += 1
-        #    if self.defeats == self.max_defeat:
-        #        self.defeats = 0
-        #        self.bet_pivot = self.pocket
-        #        self.bet_value = 2
-        #return self.bet_value 
-
-        ##########################
-        # Hard-core betting system
-        #if self.pocket <= 85:
-        #    self.bet_value = 1
-        #elif self.pocket >= 120:
-        #    self.bet_value = 5
-        #else:
-        #    self.bet_value = 4
-        #return self.bet_value
-
-        ##########################
-        # 1-3-2-6 System
-        #bets = [1, 3, 2, 6]
-        #if self.result:
-        #    self.bet_value = (self.bet_value + 1) % len(bets)
-        #else:
-        #    self.bet_value = 0
-        #return bets[self.bet_value]
-        
-        ##########################
-        # Parlay System
-        #parlay = lambda n: round(2 * n - 0.85 * n) if n < 5 else 5
-        #if self.result:
-        #    self.bet_value += 1
-        #else:
-        #    self.bet_value = 1
-        #return parlay(self.bet_value)
-        
-        #########################
-        # Incremental
-        #if self.result == 1:
-        #    self.bet_value = self.bet_value * 2 if self.bet_value * 2 <= 5 else 5
-        #else:
-        #    self.bet_value = 1
-        #return self.bet_value
-
-        #########################
-        # Incremental with savings
-        #if self.available > 20:
-        #    self.available = 10
-        #elif self.available < 0:
-        #    return 1
-        #if self.result == 1:
-        #    self.bet_value = self.bet_value * 2 if self.bet_value * 2 <= 5 else 5
-        #else:
-        #    self.bet_value = 1
-        #return self.bet_value
-        
+        self.bet_value = 2
         return 2
 
 
     def payback(self, prize):
         self.result = 0
-        if prize != 0:
-            self.result = 0 if prize < 0 else 1
+        if prize > 0:
+            self.result = 1
+        elif prize < 0:
+            self.result = 0 if prize == -self.bet_value else 0.25
         else:
             self.result = 0.5
 
         self.wins += 1 if self.result == 1 else 0
         self.defeats += 1 if self.result == 0 else 0
         self.draws += 1 if self.result == 0.5 else 0
+        self.surrenders += 1 if self.result == 0.25 else 0
 
-
-        # For every state-action in the current game, registry the game final result
-        for state_action in self.results:
-            self.results[state_action] = self.result
-        
         # Update qtable with the results of the current game
-        self.qtable = q.update_qtable(self.qtable, self.counting_table, self.results)
-
+        if self.turn > 0:
+            self.tables.update_tables(self.current_sa, self.next_sa, \
+                    self.results, self.etrace, True)
+        
         # Update game values
         self.table = 0
         self.pocket += prize
-        self.results = {}
         self.games_left -= 1
-        self.turn = 0
+        
 
         if self.games_left == 0:
             print("Number of victories: " + str(self.wins))
             print("Number of defeats: " + str(self.defeats))
             print("Number of draws: " + str(self.draws))
-            print("Pocket: " + str(self.pocket))
-       
+            print("Number of surrenders: " + str(self.surrenders))
+
+
         if self.create:
             print(self.total_games - self.games_left)
-            numpy.save(self.qtable_fname, self.qtable)
-            numpy.save(self.ctable_fname, self.counting_table)
-            self.eps = self.games_left / (self.total_games * 2)
+            self.tables.save_tables()

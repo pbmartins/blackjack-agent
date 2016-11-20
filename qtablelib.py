@@ -1,40 +1,38 @@
-import random
-from functools import reduce
+from collections import defaultdict
+import numpy
 
 # state tuple: (player_total, dealer_total, turn)
 # sa tuple : (state, action)
 #   action: s - stand, h - hit, d - double-down, u - surrender
 
-# Create all possible states list
-def create_states():
-    states = [[(player_total, dealer_total, turn)] for turn in range (1, 6) \
-            for player_total in range(11, 21) for dealer_total in range(1, 21)]
-    return reduce(lambda a, b: a + b, states, [])
-    
+class Qtable:
+    def __init__(self, qtable_fname, ctable_fname, gamma=1, learning_rate=0.9, create=True):
+        self.qtable_fname = qtable_fname
+        self.ctable_fname = ctable_fname
+        self.gamma = gamma
+        self.learning_rate = learning_rate
+        self.create = create
+        if self.create:
+            self.qtable = defaultdict(float)
+            self.ctable = defaultdict(int)
+        else:
+            self.qtable = numpy.load(self.qtable_fname).item()
+            self.ctable = numpy.load(self.ctable_fname).item()
 
-# Create dictionary of all possible state-actions (state, action) and their values
-# and will create Q-value table
-def create_qtable(states):
-    qtable = {}
-    for state in states:
-        if state[2] == 1:
-            qtable[(state, 'd')] = 0.8 if state[1] > 17 else 0.5
-        qtable[(state, 'h')] = random.uniform(0.49, 0.51)
-        qtable[(state, 's')] = random.uniform(0.49, 0.51)
-        qtable[(state, 'u')] = random.uniform(0.49, 0.51)
-    return qtable
+    # Recalculate the average reward for our Q-value table
+    def update_tables(self, current_sa, next_sa, results, etrace, payback=False):
+        qtable_next_sa = 0 if payback else self.qtable[next_sa]
+        delta = results[next_sa] + self.gamma * qtable_next_sa \
+                - self.qtable[current_sa]
+        alpha = 1.0 / self.ctable[current_sa]
+        etrace[current_sa] += 1
 
-# Setup a dictionary of state-actions to record how many times we've experienced
-# a given state-action pair. We need this to re-calculate reward averages
-def create_counting_table(qtable):
-    counting_table = {}
-    for state_action in qtable:
-        counting_table[state_action] = 1
-    return counting_table
+        for sa in results:
+            self.qtable[sa] += alpha * delta * etrace[sa]
+            etrace[sa] *= self.gamma * self.learning_rate
 
-# Recalculate the average reward for our Q-value table
-def update_qtable(qtable, counting_table, results):
-    for sa in results:
-        qtable[sa] = qtable[sa] + ((results[sa] - qtable[sa]) / counting_table[sa])
-    return qtable
+    # Save tables into their respective files
+    def save_tables(self):
+        numpy.save(self.qtable_fname, self.qtable)
+        numpy.save(self.ctable_fname, self.ctable)
 

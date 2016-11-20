@@ -24,7 +24,7 @@ class Player(object):
 
     def want_to_play(self, rules):     #if you have to much money and jut want to watch, return False
                                         # rules contains a Game.Rules object with information on the game rules (min_bet, max_bet, shoe_size, etc)
-        #print(rules)
+        print(rules)
         return True
 
     def payback(self, prize):
