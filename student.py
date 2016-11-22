@@ -11,7 +11,7 @@ class StudentPlayer(Player):
     def __init__(self, name="Meu nome", money=0):
         super(StudentPlayer, self).__init__(name, money)
         self.create = False
-        self.total_games = self.games_left = 5000000 if self.create else 1000
+        self.total_games = self.games_left = 3000000 if self.create else 1000
         self.plays = ['s', 'h', 'u', 'd']
         
         # Counting stats
@@ -21,60 +21,58 @@ class StudentPlayer(Player):
         self.surrenders = 0
 
         # Create tables to save state-action average rewards
-        self.tables = Qtable('tables/qtable_5M_sarsa.npy', \
-                'tables/ctable_5M_sarsa.npy', create=self.create)
+        self.tables = Qtable('tables/qtable_3M_v2.npy', create=self.create)
 
+        self.learning_rate = 0.015
+        self.damage = 0.5
 
     def want_to_play(self, rules):
         self.etrace = defaultdict(float)
-        self.results = {}
+        self.results = []
         self.turn = 0
         return True
 
     def play(self, dealer, players):
         # Get player hand
         hand = [p.hand for p in players if p.player.name == self.name][0]
-        # If player's hand total is under 11, keep hitting
-        if(card.value(hand)) < 11:
-            return "h"
 
         # Increment turn
         self.turn += 1
 
         # Get players' totals
         player_value = card.value(hand)
-        #player_ace = len([c for c in hand if c.is_ace()]) >= 1
+        player_ace = len([c for c in hand if c.is_ace()]) >= 1
         dealer_value = card.value(dealer.hand)
-        #dealer_ace = len([c for c in dealer.hand if c.is_ace()]) >= 1
 
-        # There's something tricky here, example:
-        #   Dealer's hand: 2, ace, hidden
-        #   card.value(dealer.hand) will return 13 because the sum of the first two cards \
-        #       don't go over the 21 limit, even if the third card is a Jack, and then, \
-        #       the ace will be considered 1 and not 11, as we thought initially
 
-        # The ace will be counted as 1, because there's stil a card to show
-        if dealer_value >= 21:
-            dealer_value -= 10
-
-        state = (player_value, dealer_value)
+        state = (player_value, dealer_value, player_ace, self.turn == 1)
         # Access qtable and search for the best probability based on state-action
-        probabilities = [self.tables.qtable.get((state, 's'), 0.5), \
-                self.tables.qtable.get((state, 'h'), 0.5), \
-                self.tables.qtable.get((state, 'u'), 0.3)]
-        max_prob = max(probabilities)
-        action = self.plays[probabilities.index(max_prob)]
-
+        default = 0.25 if self.turn == 1 else 1/3
+        dd = 0.25 if self.turn == 1 else 0
+        probabilities = [self.tables.qtable.get((state, 's'), default), \
+                self.tables.qtable.get((state, 'h'), default), \
+                self.tables.qtable.get((state, 'u'), default), \
+                self.tables.qtable.get((state, 'd'), dd)]
+        intervals = [sum(probabilities[:idx]) for idx in range(1, 5)]
+        r = random.uniform(0, 1)
+        idx = 0
+        while intervals[idx] < r:
+            idx += 1
+        action = self.plays[idx]
+        
         # Update counting table and create state-action entry on results dict
-        self.next_sa = (state, action)
-        self.results[self.next_sa] = 0.5
-                
-        if self.turn > 1:
-            self.tables.update_tables(self.current_sa, self.next_sa, \
-                    self.results, self.etrace)
+        #self.next_sa = (state, action)
+        #self.results[self.next_sa] = 0.5
+        #        
+        #if self.turn > 1:
+        #    self.tables.update_tables(self.current_sa, self.next_sa, \
+        #            self.results, self.etrace)
+        #
+        #self.tables.ctable[self.next_sa] += 1
+        #self.current_sa = self.next_sa
 
-        self.tables.ctable[self.next_sa] += 1
-        self.current_sa = self.next_sa
+        self.results += [(state, action)]
+
         return action
 
     def bet(self, dealer, players):
@@ -97,23 +95,53 @@ class StudentPlayer(Player):
         self.surrenders += 1 if self.result == 0.25 else 0
 
         # Update qtable with the results of the current game
-        if self.turn > 0:
-            self.tables.update_tables(self.current_sa, self.next_sa, \
-                    self.results, self.etrace, True)
+        #if self.turn > 0:
+        #    self.tables.update_tables(self.current_sa, self.next_sa, \
+        #            self.results, self.etrace, True)
+        
+        damage = 1
+        for i in reversed(range(len(self.results))):
+            state, action = self.results[i]
+            div = 3 if i == 0 else 2
+            default = 0.25 if i == 0 else 1/3
+            dd = 0.25 if i == 0 else 0
+            probabilities = [self.tables.qtable.get((state, 's'), default), \
+                self.tables.qtable.get((state, 'h'), default), \
+                self.tables.qtable.get((state, 'u'), default), \
+                self.tables.qtable.get((state, 'd'), dd)]
+            indx = self.plays.index(action)
+            if probabilities[indx] > 0.02 and probabilities[indx] < 0.98:
+                if self.result == 1:
+                    new_values = [probabilities[idx] + self.learning_rate * damage \
+                            if action == self.plays[idx] else probabilities[idx] \
+                            - self.learning_rate / div * damage for idx in range(0, div+1)]
+                elif self.result == 0:
+                    new_values = [probabilities[idx] - self.learning_rate * damage \
+                            if action == self.plays[idx] else probabilities[idx] \
+                            + self.learning_rate / div * damage for idx in range(0, div+1)]
+                elif self.result == 0.25:
+                    new_values = [probabilities[idx] - self.learning_rate / 1.5 * damage \
+                            if action == self.plays[idx] else probabilities[idx] \
+                            + self.learning_rate / (1.5*div) * damage for idx in range(0, div+1)]
+                else:
+                    new_values = probabilities
+                for i in range(0, div+1):
+                    self.tables.qtable[(state, self.plays[i])] = new_values[i]
+            damage *= self.damage
+
         
         # Update game values
         self.table = 0
         self.pocket += prize
         self.games_left -= 1
         
-
+        if self.create:
+            print(self.total_games - self.games_left)
         if self.games_left == 0:
             print("Number of victories: " + str(self.wins))
             print("Number of defeats: " + str(self.defeats))
             print("Number of draws: " + str(self.draws))
             print("Number of surrenders: " + str(self.surrenders))
 
-
-        if self.create:
-            print(self.total_games - self.games_left)
-            self.tables.save_tables()
+            if self.create:
+                self.tables.save_tables()
