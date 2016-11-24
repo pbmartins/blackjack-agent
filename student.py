@@ -11,7 +11,7 @@ class StudentPlayer(Player):
     def __init__(self, name="Meu nome", money=0):
         super(StudentPlayer, self).__init__(name, money)
         self.create = True
-        self.total_games = self.games_left = 3000000 if self.create else 1000
+        self.total_games = self.games_left = 10000000 if self.create else 1000
         self.plays = ['s', 'h', 'u', 'd']
         
         # Counting stats
@@ -111,52 +111,68 @@ class StudentPlayer(Player):
             damage = 1
             for i in reversed(range(len(self.results))):
                 state, action = self.results[i]
-                div = 3 if i == 0 else 2
+                #div = 3 if i == 0 else 2
                 default = 0.25 if i == 0 else 1/3
                 dd = 0.25 if i == 0 else 0
+
+                # Get probabilities and filter values between 0.02 and 0.98
                 probabilities = [self.tables.qtable.get((state, 's'), default), \
                     self.tables.qtable.get((state, 'h'), default), \
                     self.tables.qtable.get((state, 'u'), default), \
                     self.tables.qtable.get((state, 'd'), dd)]
+                probs = [(probabilities[idx], self.plays[idx]) \
+                        for idx in range(0, 4) if probabilities[idx] > 0.02 \
+                        and probabilities[idx] < 0.98]
+                div = len(probs) - 1 if i == 0 else len(probs) - 2
+
+                print(probs)
+                # Adjust probabilities based on the reward
+                if len(probs) < 2:
+                    continue
+
                 if self.result == 1:
-                    new_values = [probabilities[idx] + self.learning_rate * damage \
-                            if action == self.plays[idx] else probabilities[idx] \
-                            - self.learning_rate / div * damage for idx in range(0, div+1)]
+                    new_values = [(p[0] + self.learning_rate * damage, p[1]) \
+                            if action == p[1] else (p[0] - self.learning_rate / div \
+                            * damage, p[1]) for p in probs]
                 elif self.result == 0:
-                    new_values = [probabilities[idx] - self.learning_rate * damage \
-                            if action == self.plays[idx] else probabilities[idx] \
-                            + self.learning_rate / div * damage for idx in range(0, div+1)]
+                    new_values = [(p[0] - self.learning_rate * damage, p[1]) \
+                            if action == p[1] else (p[0] + self.learning_rate / div \
+                            * damage, p[1]) for p in probs]
                 elif self.result == 0.25:
-                    new_values = [probabilities[idx] - self.learning_rate / 1.5 * damage \
-                            if action == self.plays[idx] else probabilities[idx] \
-                            + self.learning_rate / (1.5*div) * damage for idx in range(0, div+1)]
+                    new_values = [(p[0] - self.learning_rate / 1.5 * damage, p[1]) \
+                            if action == p[1] else (p[0] - self.learning_rate / (1.5 * div) \
+                            * damage, p[1]) for p in probs]
                 else:
-                    new_values = probabilities
+                    new_values = probs
+
+                for n in new_values:
+                    self.tables.qtable[(state, n[1])] = n[0]
+
+                damage *= self.damage
                
                 # normalize values > 0.98 and < 0.02
-                need = True
-                while(need):
-                    need = False
-                    print(sum(new_values))
-                    print(new_values)
-                    for i in new_values:
-                        if i > 0.98:
-                            red = (i - 0.98) / (div - 1)
-                            val = 0.98
-                        elif i < 0:
-                            red = -((0 - i) / (div - 1))
-                            val = 0
-                        else:
-                            continue
-                        need = True
-                        for j in range(len(new_values)):
-                            new_values[j] = val if new_values[j] == i else new_values[j] + red
+                #need = True
+                #while(need):
+                #    need = False
+                #    print(sum(new_values))
+                #    print(new_values)
+                #    for i in new_values:
+                #        if i > 0.98:
+                #            red = (i - 0.98) / (div - 1)
+                #            val = 0.98
+                #        elif i < 0:
+                #            red = -((0 - i) / (div - 1))
+                #            val = 0
+                #        else:
+                #            continue
+                #        need = True
+                #        for j in range(len(new_values)):
+                #            new_values[j] = val if new_values[j] == i else new_values[j] + red
                 
-                for i in range(0, div+1):
-                    self.tables.qtable[(state, self.plays[i])] = new_values[i]
+                #for i in range(0, div+1):
+                #    self.tables.qtable[(state, self.plays[i])] = new_values[i]
                 
-                damage *= self.damage
-
+                
                 
             print(self.total_games - self.games_left)
         
