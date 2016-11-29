@@ -21,7 +21,7 @@ class StudentPlayer(Player):
         self.surrenders = 0
 
         # Create tables to save state-action average rewards
-        self.tables = Qtable('tables/qtable_3M_v3.npy', create=self.create)
+        self.tables = Qtable('tables/qtable_10M_new.npy', create=self.create)
 
         self.learning_rate = 0.015
         self.damage = 0.5
@@ -118,12 +118,14 @@ class StudentPlayer(Player):
                 # Get probabilities and filter values between 0.02 and 0.98
                 probabilities = [self.tables.qtable.get((state, 's'), default), \
                     self.tables.qtable.get((state, 'h'), default), \
-                    self.tables.qtable.get((state, 'u'), default), \
-                    self.tables.qtable.get((state, 'd'), dd)]
+                    self.tables.qtable.get((state, 'u'), default)]
+                probabilities += [self.tables.qtable.get((state, 'd'), dd)] \
+                        if i == 0 else []
+                
                 probs = [(probabilities[idx], self.plays[idx]) \
-                        for idx in range(0, 4) if probabilities[idx] > 0.02 \
-                        and probabilities[idx] < 0.98]
-                div = len(probs) - 1 if i == 0 else len(probs) - 2
+                        for idx in range(0, len(probabilities)) \
+                        if probabilities[idx] > 0.02 and probabilities[idx] < 0.98]
+                div = len(probs) - 1
 
                 print(probs)
                 # Adjust probabilities based on the reward
@@ -131,19 +133,21 @@ class StudentPlayer(Player):
                     continue
 
                 if self.result == 1:
-                    new_values = [(p[0] + self.learning_rate * damage, p[1]) \
-                            if action == p[1] else (p[0] - self.learning_rate / div \
-                            * damage, p[1]) for p in probs]
+                    up = self.learning_rate * damage
+                    down = 0 - self.learning_rate * damage / div
                 elif self.result == 0:
-                    new_values = [(p[0] - self.learning_rate * damage, p[1]) \
-                            if action == p[1] else (p[0] + self.learning_rate / div \
-                            * damage, p[1]) for p in probs]
+                    up = 0 - self.learning_rate * damage
+                    down = self.learning_rate * damage / div
                 elif self.result == 0.25:
-                    new_values = [(p[0] - self.learning_rate / 1.5 * damage, p[1]) \
-                            if action == p[1] else (p[0] - self.learning_rate / (1.5 * div) \
-                            * damage, p[1]) for p in probs]
+                    up = 0 - self.learning_rate * damage / 1.5
+                    down = self.learning_rate * damage / (1.5 * div)
                 else:
-                    new_values = probs
+                    up = 0
+                    down = 0
+
+                new_values = [(p[0] + up, p[1]) if action == p[1] \
+                        else (p[0] + down, p[1]) for p in probs]
+
 
                 for n in new_values:
                     self.tables.qtable[(state, n[1])] = n[0]
