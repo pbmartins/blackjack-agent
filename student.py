@@ -10,15 +10,21 @@ from collections import defaultdict
 class StudentPlayer(Player):
     def __init__(self, name="Meu nome", money=0):
         super(StudentPlayer, self).__init__(name, money)
-        self.create = True
+        self.create = False
         self.total_games = self.games_left = 10000000 if self.create else 1000
         self.plays = ['s', 'h', 'u', 'd']
+     
+        # Wallet 
+        self.loans = [0.70, 0.50, 0.25]
+        self.initial_wallet = self.wallet = int(self.pocket * self.loans[0])
+        self.pocket -= self.initial_wallet
         
         # Counting stats
         self.wins = 0
         self.defeats = 0
         self.draws = 0
         self.surrenders = 0
+        self.dont_play = 0
 
         # Create tables to save state-action average rewards
         self.tables = Qtable('tables/qtable_10M_new.npy', create=self.create)
@@ -27,9 +33,30 @@ class StudentPlayer(Player):
         self.damage = 0.5
 
     def want_to_play(self, rules):
+        self.rules = rules
         self.etrace = defaultdict(float)
         self.results = []
         self.turn = 0
+        
+        # Get a loan
+        if not self.wallet or self.wallet < (2 * rules.min_bet):
+            if len(self.loans) > 1:
+                self.initial_wallet = self.wallet = int(self.pocket * self.loans[1])
+                self.pocket -= self.initial_wallet
+                self.loans = self.loans[1:]
+                return True
+            else:
+                self.dont_play += 1 
+                self.games_left -= 1
+                if self.games_left == 0:
+                    self.end()
+                return False
+        # Transfer founds
+        elif self.wallet > (self.initial_wallet * 1.5):
+            self.pocket += int(self.wallet - self.initial_wallet)
+            self.wallet = self.initial_wallet
+            return True
+        
         return True
 
     def play(self, dealer, players):
@@ -82,9 +109,22 @@ class StudentPlayer(Player):
         return action
 
     def bet(self, dealer, players):
-        self.bet_value = 2
-        return 2
-
+        
+        # Compute bet
+        if self.wallet >= (self.initial_wallet * 0.80):
+            self.bet_value = int(self.wallet * 0.1)
+        elif self.wallet >= (self.initial_wallet * 0.20):
+            self.bet_value = int(self.wallet * 0.05)
+        else:
+            self.bet_value = self.rules.min_bet
+        
+        # Normalize values
+        if self.bet_value > self.rules.max_bet:
+            self.bet_value = self.rules.max_bet
+        elif self.bet_value < self.rules.min_bet:
+            self.bet_value = self.rules.min_bet
+        
+        return self.bet_value
 
     def payback(self, prize):
         self.result = 0
@@ -176,19 +216,24 @@ class StudentPlayer(Player):
                 #for i in range(0, div+1):
                 #    self.tables.qtable[(state, self.plays[i])] = new_values[i]
                 
-                
-                
             print(self.total_games - self.games_left)
         
         # Update game values
         self.table = 0
-        self.pocket += prize
+        self.wallet += prize
         self.games_left -= 1
 
         if self.games_left == 0:
-            print("Number of victories: " + str(self.wins))
-            print("Number of defeats: " + str(self.defeats))
-            print("Number of draws: " + str(self.draws))
-            print("Number of surrenders: " + str(self.surrenders))
-            if self.create:
-                self.tables.save_tables()
+            self.end()
+
+    def end(self):
+        self.pocket += self.wallet
+        self.initial_wallet = self.wallet = 0
+        print("Number of victories: " + str(self.wins))
+        print("Number of defeats: " + str(self.defeats))
+        print("Number of draws: " + str(self.draws))
+        print("Number of surrenders: " + str(self.surrenders))
+        print("Number of games passed: " + str(self.dont_play))
+        if self.create:
+            self.tables.save_tables()
+
