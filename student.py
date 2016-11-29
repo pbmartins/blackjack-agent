@@ -15,10 +15,11 @@ class StudentPlayer(Player):
         self.plays = ['s', 'h', 'u', 'd']
      
         # Wallet 
-        self.loans = [0.70, 0.50, 0.25]
+        self.loans = [0.50, 0.25, 0.125]
         self.initial_wallet = self.wallet = int(self.pocket * self.loans[0])
         self.pocket -= self.initial_wallet
-        
+        self.disable_dd = False
+
         # Counting stats
         self.wins = 0
         self.defeats = 0
@@ -76,7 +77,8 @@ class StudentPlayer(Player):
         state = (player_value, dealer_value, player_ace, self.turn == 1)
         # Access qtable and search for the best probability based on state-action
         default = 0.25 if self.turn == 1 else 1/3
-        dd = 0.25 if self.turn == 1 else 0
+        dd = 0.25 if self.turn == 1 and not self.disable_dd else 0
+
         probabilities = [self.tables.qtable.get((state, 's'), default), \
                 self.tables.qtable.get((state, 'h'), default), \
                 self.tables.qtable.get((state, 'u'), default), \
@@ -108,8 +110,8 @@ class StudentPlayer(Player):
         
         return action
 
-    def bet(self, dealer, players):
-        
+    def bet(self, dealer, players): 
+        self.disable_dd = False
         # Compute bet
         if self.wallet >= (self.initial_wallet * 0.80):
             self.bet_value = int(self.wallet * 0.1)
@@ -117,6 +119,7 @@ class StudentPlayer(Player):
             self.bet_value = int(self.wallet * 0.05)
         else:
             self.bet_value = self.rules.min_bet
+            self.disable_dd = True
         
         # Normalize values
         if self.bet_value > self.rules.max_bet:
