@@ -16,8 +16,10 @@ class StudentPlayer(Player):
      
         # Wallet 
         self.loans = [0.50, 0.25, 0.125]
-        self.initial_wallet = self.wallet = int(self.pocket * self.loans[0])
-        self.pocket -= self.initial_wallet
+        self.my_pocket = self.pocket
+        self.initial_wallet = self.wallet = int(self.my_pocket * self.loans[0])
+        self.my_pocket -= self.initial_wallet
+        
         self.disable_dd = False
 
         # Counting stats
@@ -42,8 +44,9 @@ class StudentPlayer(Player):
         # Get a loan
         if not self.wallet or self.wallet < (2 * rules.min_bet):
             if len(self.loans) > 1:
-                self.initial_wallet = self.wallet = int(self.pocket * self.loans[1])
-                self.pocket -= self.initial_wallet
+                self.initial_wallet = int(self.my_pocket * self.loans[1])
+                self.wallet += self.initial_wallet
+                self.my_pocket -= self.initial_wallet
                 self.loans = self.loans[1:]
                 return True
             else:
@@ -54,7 +57,7 @@ class StudentPlayer(Player):
                 return False
         # Transfer founds
         elif self.wallet > (self.initial_wallet * 1.5):
-            self.pocket += int(self.wallet - self.initial_wallet)
+            self.my_pocket += self.wallet - self.initial_wallet
             self.wallet = self.initial_wallet
             return True
         
@@ -223,6 +226,7 @@ class StudentPlayer(Player):
         
         # Update game values
         self.table = 0
+        self.pocket += prize
         self.wallet += prize
         self.games_left -= 1
 
@@ -230,7 +234,7 @@ class StudentPlayer(Player):
             self.end()
 
     def end(self):
-        self.pocket += self.wallet
+        self.my_pocket += self.wallet
         self.initial_wallet = self.wallet = 0
         print("Number of victories: " + str(self.wins))
         print("Number of defeats: " + str(self.defeats))
