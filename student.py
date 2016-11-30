@@ -13,12 +13,21 @@ class StudentPlayer(Player):
         self.create = True
         self.total_games = self.games_left = 10000000 if self.create else 1000
         self.plays = ['s', 'h', 'u', 'd']
+     
+        # Wallet 
+        self.loans = [0.50, 0.25, 0.125]
+        self.my_pocket = self.pocket
+        self.initial_wallet = self.wallet = int(self.my_pocket * self.loans[0])
+        self.my_pocket -= self.initial_wallet
         
+        self.disable_dd = False
+
         # Counting stats
         self.wins = 0
         self.defeats = 0
         self.draws = 0
         self.surrenders = 0
+        self.dont_play = 0
 
         # Create tables to save state-action average rewards
         self.tables = Qtable('tables/qtable_10M_final.npy', create=self.create)
@@ -28,8 +37,33 @@ class StudentPlayer(Player):
         self.damage = 1
 
     def want_to_play(self, rules):
+        self.rules = rules
         self.results = []
         self.turn = 0
+       
+        if self.create:
+            return True
+
+        # Get a loan
+        if not self.wallet or self.wallet < (2 * rules.min_bet):
+            if len(self.loans) > 1:
+                self.initial_wallet = int(self.my_pocket * self.loans[1])
+                self.wallet += self.initial_wallet
+                self.my_pocket -= self.initial_wallet
+                self.loans = self.loans[1:]
+                return True
+            else:
+                self.dont_play += 1 
+                self.games_left -= 1
+                if self.games_left == 0:
+                    self.end()
+                return False
+        # Transfer founds
+        elif self.wallet > (self.initial_wallet * 1.5):
+            self.my_pocket += self.wallet - self.initial_wallet
+            self.wallet = self.initial_wallet
+            return True
+        
         return True
 
     def play(self, dealer, players):
@@ -51,11 +85,14 @@ class StudentPlayer(Player):
         # Access qtable and search for the best probability based on state-action
         default = 0.25 if self.turn == 1 else 1/3
         dd = 0.25
+
         probabilities = [self.tables.qtable.get((state, 's'), default), \
                 self.tables.qtable.get((state, 'h'), default), \
                 self.tables.qtable.get((state, 'u'), default)]
         probabilities += [self.tables.qtable.get((state, 'd'), dd)] \
                 if self.turn == 1 else []
+        if not self.create and self.disabled_dd:
+            probabilities = [p[i] + p[3] / 3 for i in range(1, len(probabilities))]
         intervals = [sum(probabilities[:idx]) for idx in range(1, len(probabilities) + 1)]
         r = random.uniform(0, 1)
         
@@ -66,10 +103,6 @@ class StudentPlayer(Player):
         action = self.plays[idx]
         self.results += [(state, action)]
         return action
-
-    def bet(self, dealer, players):
-        self.bet_value = 2
-        return 2
 
     def adjust(self, probs, action, min_threshold, max_threshold, state):
         up, down = self.get_up_down(len(probs) - 1, state)
@@ -130,6 +163,24 @@ class StudentPlayer(Player):
 
         return player_wins / len(cards)
 
+    def bet(self, dealer, players): 
+        self.disable_dd = False
+        # Compute bet
+        if self.wallet >= (self.initial_wallet * 0.80):
+            self.bet_value = int(self.wallet * 0.1)
+        elif self.wallet >= (self.initial_wallet * 0.20):
+            self.bet_value = int(self.wallet * 0.05)
+        else:
+            self.bet_value = self.rules.min_bet
+            self.disable_dd = True
+        
+        # Normalize values
+        if self.bet_value > self.rules.max_bet:
+            self.bet_value = self.rules.max_bet
+        elif self.bet_value < self.rules.min_bet:
+            self.bet_value = self.rules.min_bet
+        
+        return self.bet_value
 
     def payback(self, prize):
         self.result = 0
@@ -165,10 +216,9 @@ class StudentPlayer(Player):
 
                 max_threshold = 1.0 - min_threshold * (len(probs) - 1)
 
-                print("intial probs = " + str(probs))
+                #print("intial probs = " + str(probs))
                 #print("action = " + action)
                 # Adjust probabilities based on the reward
-
                 # Check if the action to be valued does not surpass the min or max threshold
                 adjust = self.adjust(probs, action, min_threshold, max_threshold, state)
                 if adjust:
@@ -186,20 +236,26 @@ class StudentPlayer(Player):
                             self.tables.qtable[(state, n[1])] = n[0]
 
                 self.damage *= self.damage_rate
-                               
-         
                 
             print(self.total_games - self.games_left)
         
         # Update game values
         self.table = 0
         self.pocket += prize
+        self.wallet += prize
         self.games_left -= 1
 
         if self.games_left == 0:
-            print("Number of victories: " + str(self.wins))
-            print("Number of defeats: " + str(self.defeats))
-            print("Number of draws: " + str(self.draws))
-            print("Number of surrenders: " + str(self.surrenders))
-            if self.create:
-                self.tables.save_tables()
+            self.end()
+
+    def end(self):
+        self.my_pocket += self.wallet
+        self.initial_wallet = self.wallet = 0
+        print("Number of victories: " + str(self.wins))
+        print("Number of defeats: " + str(self.defeats))
+        print("Number of draws: " + str(self.draws))
+        print("Number of surrenders: " + str(self.surrenders))
+        print("Number of games passed: " + str(self.dont_play))
+        if self.create:
+            self.tables.save_tables()
+
