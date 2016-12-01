@@ -22,6 +22,9 @@ class Card(object):
     def __repr__(self):
         return self.__str__()
 
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
+
     def value(self):
         return self.rank if self.rank < 10 else 10
 
