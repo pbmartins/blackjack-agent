@@ -10,8 +10,8 @@ from collections import defaultdict
 class StudentPlayer(Player):
     def __init__(self, name="Meu nome", money=0):
         super(StudentPlayer, self).__init__(name, money)
-        self.create = True
-        self.total_games = self.games_left = 10000000 if self.create else 1000
+        self.create = False
+        self.total_games = self.games_left = 2000000 if self.create else 1000
         self.plays = ['s', 'h', 'u', 'd']
      
         # Wallet 
@@ -30,7 +30,7 @@ class StudentPlayer(Player):
         self.dont_play = 0
 
         # Create tables to save state-action average rewards
-        self.tables = Qtable('tables/qtable_10M_final.npy', create=self.create)
+        self.tables = Qtable('tables/qtable_2M_final.npy', create=self.create)
 
         self.learning_rate = 0.015
         self.damage_rate = 0.5
@@ -40,6 +40,8 @@ class StudentPlayer(Player):
         self.rules = rules
         self.results = []
         self.turn = 0
+        self.previous_cards = 0
+        self.dealer_action = 'h'
        
         return True
         if self.create:
@@ -72,6 +74,11 @@ class StudentPlayer(Player):
         self.players_hand = [p.hand for p in players]
         self.player_hand = [p.hand for p in players if p.player.name == self.name][0]
         self.dealer_hand = dealer.hand
+        if len(dealer.hand) != self.previous_cards:
+            previous_cards = len(dealer.hand)
+        else:
+            self.dealer_action = 's'
+
 
         # Increment turn
         self.turn += 1
@@ -81,8 +88,8 @@ class StudentPlayer(Player):
         player_ace = len([c for c in self.player_hand if c.is_ace()]) >= 1
         dealer_value = card.value(dealer.hand)
 
-        if dealer_value >= 21:
-            dealer_value -= 10
+        #if dealer_value >= 21:
+        #    dealer_value -= 10
 
         state = (player_value, dealer_value, player_ace, self.turn == 1)
         # Access qtable and search for the best probability based on state-action
@@ -95,8 +102,7 @@ class StudentPlayer(Player):
         probabilities += [self.tables.qtable.get((state, 'd'), dd)] \
                 if self.turn == 1 else []
         if not self.create and self.turn == 1 and self.disable_dd:
-            probabilities = [probabilities[i] + probabilities[3] / 3 \
-                    for i in range(0, len(probabilities))]
+            probabilities[1] += probabilities[3]
         intervals = [sum(probabilities[:idx]) for idx in range(1, len(probabilities) + 1)]
         r = random.uniform(0, 1)
         idx = 0
@@ -173,32 +179,22 @@ class StudentPlayer(Player):
             return 0, 0
 
     def get_win_prob(self):
-        if card.value(self.dealer_hand) < 15 or len([c for c in self.dealer_hand if c.is_ace()]) > 0:
+        # If it's the first turn, it doesn't make sense to surrender already
+        # Also if dealer action is 'h', we can't evaluate
+        if self.turn == 1 or self.dealer_action != 's':
             return 1.0
-        all_cards = [card.Card(s, r) for r in range(1, 14) for s in range(4)]
+        player_total = card.value(self.player_hand)
+
+        cards = [card.Card(s, r) for r in range(1, 14) for s in range(4)]
         # Remove cards already played
         for hand in self.players_hand + [self.dealer_hand]:
-            initial_cards = [c for c in all_cards if c not in hand]
+            cards = [c for c in cards if c not in hand]
 
-        # Create all possible scenarios
-        d_scenarios = [(self.dealer_hand, initial_cards)]
-        final_scenarios = []
-        while d_scenarios != []:
-            d_scenarios = [(s + [c], [x for x in cards if x != c]) \
-                    for (s, cards) in d_scenarios for c in cards]
-            #print("not filtered = " + str(d_scenarios))
-            #print()
-            final_scenarios += [s for (s, c) in d_scenarios if card.value(s) >= 17]
-            #print("final filtered = " + str(final_scenarios))
-            #print()
-            d_scenarios = [(s, c) for (s, c) in d_scenarios if s not in final_scenarios]
-            #print("scenarios filtered = " + str(d_scenarios))
-            #print()
+        scenarios = [self.dealer_hand + [c] for c in cards]
+        possible_scenarios = [s for s in scenarios if card.value(s) >= 17]
+        wins = [s for s in possible_scenarios if card.value(s) > 21 or player_total > card.value(s)]
 
-        player_total = card.value(self.player_hand)
-        wins = len([s for s in final_scenarios \
-                if card.value(s) > 21 or player_total > card.value(s)])
-        return wins / len(final_scenarios)
+        return len(wins) / len(possible_scenarios)
         
 
     def payback(self, prize):
@@ -224,12 +220,7 @@ class StudentPlayer(Player):
             win_prob = 0.0
             for i in reversed(range(len(self.results))):
                 state, action = self.results[i]
-                #print(action)
-                #print(self.dealer_hand)
-                #print("player_total = " + str(card.value(self.player_hand)) \
-                #        + ", dealer_total = " + str(card.value(self.dealer_hand)))
                 win_prob = self.get_win_prob() if action == 'u' else win_prob
-                #print("win_prob = " + str(win_prob))
                 
                 default = 0.25 if i == 0 else 1/3
 
@@ -242,21 +233,17 @@ class StudentPlayer(Player):
 
                 max_threshold = 1.0 - min_threshold * (len(probs) - 1)
 
-                #print("intial probs = " + str(probs))
-                #print("action = " + action)
                 # Adjust probabilities based on the reward
                 # Check if the action to be valued does not surpass the min or max threshold
                 adjust = self.adjust(probs, action, min_threshold, max_threshold, win_prob)
                 if adjust:
                     # Filter values thar after updating surpass min or max threshold
                     probs = self.get_probs(probs, action, min_threshold, max_threshold, win_prob)
-                    #print("filtered probs = " + str(probs))
                     if probs != None:
                         up, down = self.get_up_down(len(probs) - 1, win_prob)
 
                         new_values = [(p[0] + up, p[1]) if action == p[1] \
                                 else (p[0] + down, p[1]) for p in probs]
-                        #print("new_values = " + str(new_values))
 
                         for n in new_values:
                             self.tables.qtable[(state, n[1])] = n[0]
