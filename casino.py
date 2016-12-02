@@ -4,7 +4,7 @@ from randomplayer import RandomPlayer
 from student import StudentPlayer
 
 def main():
-    players = [StudentPlayer("Diogo Martins", 100)]
+    players = [StudentPlayer("Diogo Martins", 1000)]
     #players = [Player("Pedro", 100)]
     for i in range(1000):
         #print(players)
