@@ -3,10 +3,10 @@ from player import Player
 from randomplayer import RandomPlayer
 from student import StudentPlayer
 
-def main():
-    players = [StudentPlayer("Diogo Martins", 1000)]
+def main(table_name='StateAction', n_games=1000, pocket=100, train=False):
+    players = [StudentPlayer("Diogo Martins", pocket, table_name, n_games, train)]
     #players = [Player("Pedro", 100)]
-    for i in range(1000):
+    for i in range(n_games):
         #print(players)
         g = Game(players, min_bet=1, max_bet=5, verbose=False) 
         #g = Game(players, debug=True)

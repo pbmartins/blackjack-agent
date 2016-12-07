@@ -1,17 +1,17 @@
 #encoding: utf8
 import card
 import random
-from qtablelib import Qtable
 import numpy
 import math
 from player import Player
 from collections import defaultdict
+import sqlite3
 
 class StudentPlayer(Player):
-    def __init__(self, name="Meu nome", money=0):
+    def __init__(self, name="Meu nome", money=0, table_name='StateAction', n_games='10000000', train=False):
         super(StudentPlayer, self).__init__(name, money)
-        self.create = False
-        self.total_games = self.games_left = 1000000 if self.create else 1000
+        self.create = train
+        self.total_games = self.games_left = n_games
         self.plays = ['s', 'h', 'u', 'd']
      
         # Wallet 
@@ -30,7 +30,13 @@ class StudentPlayer(Player):
         self.dont_play = 0
 
         # Create tables to save state-action average rewards
-        self.tables = Qtable('tables/qtable_2M_final.npy', create=self.create)
+        self.table_name = table_name
+        self.conn = sqlite3.connect('tables.sqlite')
+        self.get_prob_query = 'SELECT StateID, Action, Probability ' + \
+                'FROM ' + self.table_name + ' WHERE PlayerPoints=? ' + \
+                'AND DealerPoints=? AND SoftHand=? AND FirstTurn=?'
+        self.update_prob_query = 'UPDATE ' + self.table_name + ' SET Probability=?' + \
+                ' WHERE StateID=?'
 
         self.learning_rate = 0.015
         self.damage_rate = 0.7
@@ -71,10 +77,10 @@ class StudentPlayer(Player):
     def play(self, dealer, players):
         # Get player hand
         player_hand = [p.hand for p in players if p.player.name == self.name][0]
-        if len(dealer.hand) != self.previous_cards:
-            previous_cards = len(dealer.hand)
-        else:
-            self.dealer_action = 's'
+        #if len(dealer.hand) != self.previous_cards:
+        #    previous_cards = len(dealer.hand)
+        #else:
+        #    self.dealer_action = 's'
 
         # Increment turn
         self.turn += 1
@@ -84,27 +90,24 @@ class StudentPlayer(Player):
         player_ace = len([c for c in player_hand if c.is_ace()]) >= 1
         self.dealer_value = card.value(dealer.hand)
 
-        #if dealer_value >= 21:
-        #    dealer_value -= 10
-
+        actions = self.plays if self.turn == 1 else self.plays[:-1]
         state = (self.player_value, self.dealer_value, player_ace, self.turn == 1)
         # Access qtable and search for the best probability based on state-action
-        default = 0.25 if self.turn == 1 else 1/3
-        dd = 0.25
+        
+        states_query = self.conn.execute(self.get_prob_query, (state)).fetchall()
+        probs = [prob for state_id, action, prob in states_query]
 
-        probabilities = [self.tables.qtable.get((state, 's'), default), \
-                self.tables.qtable.get((state, 'h'), default), \
-                self.tables.qtable.get((state, 'u'), default)]
-        probabilities += [self.tables.qtable.get((state, 'd'), dd)] \
-                if self.turn == 1 else []
+        ##### REVER ISTO ######
         if not self.create and self.turn == 1 and self.disable_dd:
-            probabilities[1] += probabilities[3]
-        intervals = [sum(probabilities[:idx]) for idx in range(1, len(probabilities) + 1)]
+            probs[1] += probs[3]
+
+        intervals = [sum(probs[:idx]) for idx in range(1, len(probs) + 1)]
         r = random.uniform(0, 1)
         idx = 0
         while intervals[idx] < r:
             idx += 1
 
+        print(idx)
         action = self.plays[idx]
         self.results += [(state, action)]
         return action
@@ -129,37 +132,6 @@ class StudentPlayer(Player):
         self.bet_value = 2
         return self.bet_value
 
-    def adjust(self, probs, action, min_threshold, max_threshold, good_surr):
-        up, down = self.get_up_down(len(probs) - 1, good_surr)
-        if self.result == 1:
-            condition = lambda p: p[0] + up > max_threshold
-        elif self.result == 0:
-            condition = lambda p: p[0] + up < min_threshold
-        elif self.result == 0.25:
-            if not good_surr:
-                condition = lambda p: p[0] + up < min_threshold
-            else:
-                condition = lambda p: p[0] + up > max_threshold
-        else:
-            return False
-        return not any([p[1] == action and condition(p) for p in probs])
-
-
-    def get_probs(self, probs, action, min_threshold, max_threshold, good_surr):
-        if len(probs) < 2:
-            return None
-        surrender_cond = lambda p, up, down: p[0] + down < min_threshold \
-                if down < 0 else p[0] + down < max_threshold
-        for p in probs:
-            if p[1] != action:
-                up, down = self.get_up_down(len(probs) - 1, good_surr)
-                if self.result == 1 and p[0] + down < min_threshold or \
-                        self.result == 0 and p[0] + down > max_threshold or \
-                        self.result == 0.25 and surrender_cond(p, up, down):
-                    probs.remove(p)
-                    max_threshold = 1.0 - min_threshold * (len(probs) - 1)
-                    return self.get_probs(probs, action, min_threshold, max_threshold, good_surr)
-        return probs
 
     def get_up_down(self, div, good_surr):
         up = self.learning_rate * self.damage
@@ -185,7 +157,6 @@ class StudentPlayer(Player):
             return 0 if p_bust > threshold else 1
         else:
             return 0
-        #return 1 if new_dealer_points > self.player_value and p_bust > threshold else 0
       
 
     def payback(self, prize):
@@ -216,30 +187,21 @@ class StudentPlayer(Player):
                 default = 0.25 if i == 0 else 1/3
 
                 # Get probabilities and filter values between 0.02 and 0.98
-                probs = [(self.tables.qtable.get((state, 's'), default), 's'), \
-                    (self.tables.qtable.get((state, 'h'), default), 'h'), \
-                    (self.tables.qtable.get((state, 'u'), default), 'u')]
-                probs += [(self.tables.qtable.get((state, 'd'), dd), 'd')] \
-                        if i == 0 else []
+                actions = self.plays if self.turn == 1 else self.plays[:-1]
+                states_query = self.conn.execute(self.get_prob_query, (state)).fetchall()
+                probs = [prob for state_id, action, prob in states_query]
 
                 max_threshold = 1.0 - min_threshold * (len(probs) - 1)
                 skip = False
-
-                for p, a in probs:
-                    if p > max_threshold or p < min_threshold:
-                        skip = True
-                        break
-
-                if skip:
+                if any([p > max_threshold or p < min_threshold for p in probs]):
                     continue
 
                 up, down = self.get_up_down(len(probs) - 1, good_surr)
-                new_values = [(p[0] + up, p[1]) if action == p[1] \
-                        else (p[0] + down, p[1]) for p in probs]
+                new_values = [(p + up, s) if action == a else (p + down, s) \
+                        for s, a, p in states_query]
 
-                for p, a in probs:
-                    self.tables.qtable[(state, a)] = p + up if action == a \
-                            else p + down
+                self.conn.executemany(self.update_prob_query, new_values)
+                self.conn.commit()
 
                 self.damage *= self.damage_rate
                 
