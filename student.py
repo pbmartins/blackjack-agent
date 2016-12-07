@@ -45,6 +45,7 @@ class StudentPlayer(Player):
     def want_to_play(self, rules):
         self.rules = rules
         self.results = []
+        self.queries = []
         self.turn = 0
         self.previous_cards = 0
         self.dealer_action = 'h'
@@ -95,6 +96,7 @@ class StudentPlayer(Player):
         # Access qtable and search for the best probability based on state-action
         
         states_query = self.conn.execute(self.get_prob_query, (state)).fetchall()
+        self.queries += [states_query]
         probs = [prob for state_id, action, prob in states_query]
 
         ##### REVER ISTO ######
@@ -107,7 +109,6 @@ class StudentPlayer(Player):
         while intervals[idx] < r:
             idx += 1
 
-        print(idx)
         action = self.plays[idx]
         self.results += [(state, action)]
         return action
@@ -154,7 +155,7 @@ class StudentPlayer(Player):
         p_bust = len([v for v in scenarios if v > 21]) / len(scenarios)
         threshold = 0.5
         if new_dealer_points > self.player_value:
-            return 0 if p_bust > threshold else 1
+            return 1 if p_bust > threshold else 0
         else:
             return 0
       
@@ -188,7 +189,7 @@ class StudentPlayer(Player):
 
                 # Get probabilities and filter values between 0.02 and 0.98
                 actions = self.plays if self.turn == 1 else self.plays[:-1]
-                states_query = self.conn.execute(self.get_prob_query, (state)).fetchall()
+                states_query = self.queries[i]
                 probs = [prob for state_id, action, prob in states_query]
 
                 max_threshold = 1.0 - min_threshold * (len(probs) - 1)
