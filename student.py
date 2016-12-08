@@ -39,7 +39,7 @@ class StudentPlayer(Player):
                 ' WHERE StateID=?'
 
         self.learning_rate = 0.015
-        self.damage_rate = 0.7
+        self.damage_rate = 0.6
         self.damage = 1
 
     def want_to_play(self, rules):
@@ -78,10 +78,6 @@ class StudentPlayer(Player):
     def play(self, dealer, players):
         # Get player hand
         player_hand = [p.hand for p in players if p.player.name == self.name][0]
-        #if len(dealer.hand) != self.previous_cards:
-        #    previous_cards = len(dealer.hand)
-        #else:
-        #    self.dealer_action = 's'
 
         # Increment turn
         self.turn += 1
@@ -93,8 +89,8 @@ class StudentPlayer(Player):
 
         actions = self.plays if self.turn == 1 else self.plays[:-1]
         state = (self.player_value, self.dealer_value, player_ace, self.turn == 1)
+
         # Access qtable and search for the best probability based on state-action
-        
         states_query = self.conn.execute(self.get_prob_query, (state)).fetchall()
         self.queries += [states_query]
         probs = [prob for state_id, action, prob in states_query]
@@ -153,7 +149,7 @@ class StudentPlayer(Player):
 
         scenarios = [self.player_value + c for c in list(range(1, 12)) + [10, 10, 10]]
         p_bust = len([v for v in scenarios if v > 21]) / len(scenarios)
-        threshold = 0.5
+        threshold = 0.55
         if new_dealer_points > self.player_value:
             return 1 if p_bust > threshold else 0
         else:
@@ -225,6 +221,4 @@ class StudentPlayer(Player):
         print("Number of draws: " + str(self.draws))
         print("Number of surrenders: " + str(self.surrenders))
         print("Number of games passed: " + str(self.dont_play))
-        if self.create:
-            self.tables.save_tables()
 
