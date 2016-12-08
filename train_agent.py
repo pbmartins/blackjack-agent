@@ -24,7 +24,7 @@ def main():
     conn.executemany(states_query, states)
     conn.commit()
 
-    n_games = 10000000
+    n_games = 50000000
     print("Training agent with " + str(n_games)+ ":")
     casino_main(table_name=table_name, n_games=n_games, train=True)
 
