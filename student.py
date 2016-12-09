@@ -38,6 +38,12 @@ class StudentPlayer(Player):
         self.update_prob_query = 'UPDATE ' + self.table_name + ' SET Probability=?' + \
                 ' WHERE StateID=?'
 
+        self.rewards = {
+                's': [0.015]
+                'h': [0.002, 0.005, 0.008],
+                'u': [0.005, 0.005],
+                'd': [0.002, 0.005, 0.008]
+                }
         self.learning_rate = 0.015
         self.damage_rate = 0.6
         self.damage = 1
@@ -45,7 +51,9 @@ class StudentPlayer(Player):
     def want_to_play(self, rules):
         self.rules = rules
         self.results = []
-        self.queries = []
+        self.query = None
+        self.action = None
+        self.state = None
         self.turn = 0
         self.previous_cards = 0
         self.dealer_action = 'h'
@@ -90,9 +98,33 @@ class StudentPlayer(Player):
         actions = self.plays if self.turn == 1 else self.plays[:-1]
         state = (self.player_value, self.dealer_value, player_ace, self.turn == 1)
 
+        # Update values on table
+        reward = 0
+        if self.create and self.turn > 1:
+            if self.action == 's':
+                reward = 0.015 if state[0] > state[1] else -0.015
+            elif self.action == 'h' or self.action == 'd':
+                if self.state[0] > self.state[1]:
+                    reward += 0.002 if state[0] < 22
+                    reward += 0.013 if state[0] - state[1] > self.state[0] - self.state[1] else 0
+                else:
+                    reward += 0.002 if state[0] < 22
+                    reward += 0.005 if state[0] - state[1] > self.state[0] - self.state[1] else 0
+                    reward += 0.008 if state[0] > state[1]
+                reward = -0.015 if reward == 0 else reward
+            elif self.action == 'u':
+                reward += 0.005 if state[1] + 7 > 21 else 0
+                reward += 0.005 if self.p_bust > 0.5 else 0
+                reward = -0.010 if reward == 0 else reward
+
+
+
+
+
+        self.state = state
         # Access qtable and search for the best probability based on state-action
-        states_query = self.conn.execute(self.get_prob_query, (state)).fetchall()
-        self.queries += [states_query]
+        states_query = self.conn.execute(self.get_prob_query, (self.state)).fetchall()
+        self.query = states_query
         probs = [prob for state_id, action, prob in states_query]
 
         ##### REVER ISTO ######
@@ -105,9 +137,9 @@ class StudentPlayer(Player):
         while intervals[idx] < r:
             idx += 1
 
-        action = self.plays[idx]
-        self.results += [(state, action)]
-        return action
+        self.action = self.plays[idx]
+        #self.results += [(state, action)]
+        return self.action
 
     def bet(self, dealer, players): 
         self.disable_dd = False
@@ -142,13 +174,17 @@ class StudentPlayer(Player):
         else:
             return 0, 0
 
+    def p_bust(self):
+        scenarios = [self.player_value + c for c in list(range(1, 12)) + [10, 10, 10]]
+        return len([v for v in scenarios if v > 21]) / len(scenarios)
+
+
     def good_surrender(self):
         new_dealer_points = self.dealer_value + 7
         if new_dealer_points > 21:
             return 0
 
-        scenarios = [self.player_value + c for c in list(range(1, 12)) + [10, 10, 10]]
-        p_bust = len([v for v in scenarios if v > 21]) / len(scenarios)
+        p_bust = self.p_bust()
         threshold = 0.55
         if new_dealer_points > self.player_value:
             return 1 if p_bust > threshold else 0

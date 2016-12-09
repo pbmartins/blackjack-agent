@@ -4,7 +4,8 @@ from casino import main as casino_main
 def main():
     conn = sqlite3.connect('tables.sqlite')
     table_name = 'StateAction'
-    table_query = 'CREATE TABLE IF NOT EXISTS [' + table_name + '] (' + \
+    conn.execute('DROP TABLE IF EXISTS [' + table_name + ']')
+    table_query = 'CREATE TABLE [' + table_name + '] (' + \
         '[StateID]          INTEGER PRIMARY KEY AUTOINCREMENT,' + \
         '[PlayerPoints]     INTEGER NOT NULL,' + \
         '[DealerPoints]     INTEGER NOT NULL,' + \
