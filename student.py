@@ -126,7 +126,6 @@ class StudentPlayer(Player):
         intervals = [sum(probs[:idx]) for idx in range(1, len(probs) + 1)]
         r = random.uniform(0, 1)
         idx = 0
-        print(intervals)
         while intervals[idx] < r:
             idx += 1
 
@@ -170,7 +169,7 @@ class StudentPlayer(Player):
         if min(probs) >= self.min_treshold and max(probs) <= max_treshold:
             up = reward
             down = -reward / (len(probs) - 1)
-            action_idx = self.plays.index(self.action) + 1
+            action_idx = self.plays.index(self.action)
             new_values = [probs[i] + up if i == action_idx else probs[i] + down \
                     for i in range(0, len(probs))]
             if len(new_values) < 4:
