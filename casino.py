@@ -4,12 +4,10 @@ from randomplayer import RandomPlayer
 from student import StudentPlayer
 
 def main(n_games=1000, pocket=100):
-    #players = [StudentPlayer("Diogo Martins", pocket)]
-    players = [Player("Pedro", 100)]
+    players = [StudentPlayer("Diogo Martins", pocket)]
+    #players = [Player("Pedro", 100)]
     for i in range(n_games):
-        #print(players)
-        g = Game(players, min_bet=1, max_bet=5, verbose=True) 
-        #g = Game(players, debug=True)
+        g = Game(players, min_bet=1, max_bet=5, verbose=False) 
         g.run()
     
     print("OVERALL: ", players)

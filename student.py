@@ -37,16 +37,16 @@ class StudentPlayer(Player):
         # Create tables to save state-action average rewards
         self.table_name = configs['table_name']
         self.conn = sqlite3.connect('tables.sqlite')
-        self.get_prob_query = 'SELECT StateID, Action, Probability ' + \
+        self.get_prob_query = 'SELECT StateID, Stand, Hit, Surrender, DoubleDown ' + \
                 'FROM ' + self.table_name + ' WHERE PlayerPoints=? ' + \
-                'AND DealerPoints=? AND SoftHand=? AND FirstTurn=?'
-        self.update_prob_query = 'UPDATE ' + self.table_name + ' SET Probability=?' + \
-                ' WHERE StateID=?'
+                'AND DealerPoints=? AND HardHand=? AND FirstTurn=?'
+        self.update_prob_query = 'UPDATE ' + self.table_name + \
+                ' SET Stand=?, Hit=?, Surrender=?, DoubleDown=? ' + \
+                'WHERE StateID=?'
         self.learning_rate = 0.015
         self.bust_threshold = configs['bust_threshold']
 
         # Ignore rewards
-        self.max_treshold = 0.98
         self.min_treshold = configs['min_threshold']
 
     def want_to_play(self, rules):
@@ -54,8 +54,6 @@ class StudentPlayer(Player):
         self.action = None
         self.state = None
         self.turn = 0
-        self.previous_cards = 0
-        self.dealer_action = 'h'
        
         if self.create:
             return True
@@ -96,7 +94,7 @@ class StudentPlayer(Player):
 
         state = (self.player_value, self.dealer_value, player_ace, self.turn == 1)
 
-        # Update values on table
+        # Update last query
         reward = 0
         if self.create and self.turn > 1:
             if self.action == 's':
@@ -118,9 +116,9 @@ class StudentPlayer(Player):
             
         self.state = state
         # Access table and search for the best probability based on state-action
-        self.states_query = self.conn.execute(self.get_prob_query, (self.state)).fetchall()
-        probs = [prob for state_id, action, prob in self.states_query]
-
+        self.states_query = list(self.conn.execute(self.get_prob_query, (self.state)).fetchall()[0])
+        probs = self.states_query[1:]
+        
         if self.disable_dd and self.turn == 1:
             probs[1] += probs[3]
             probs[-1:] = []
@@ -128,6 +126,7 @@ class StudentPlayer(Player):
         intervals = [sum(probs[:idx]) for idx in range(1, len(probs) + 1)]
         r = random.uniform(0, 1)
         idx = 0
+        print(intervals)
         while intervals[idx] < r:
             idx += 1
 
@@ -166,22 +165,18 @@ class StudentPlayer(Player):
         return len([v for v in scenarios if v > 21]) / len(scenarios)
     
     def adjust_probs(self, reward):
-        probs = [prob for state_id, action, prob in self.queries[-1]]
-        self.max_threshold = 1.0 - min_threshold * (len(probs) - 1)
-        if not any([p > self.max_threshold or p < self.min_threshold \
-                for p in probs]):
+        probs = self.states_query[1:] if self.states_query[-1] != 0 else self.states_query[1:-1]
+        max_treshold = 1.0 - self.min_treshold * (len(probs) - 1)
+        if min(probs) >= self.min_treshold and max(probs) <= max_treshold:
             up = reward
-            down = -reward / len(probs - 1)
-            new_values = [(p + up, s) if self.action == a else (p + down, s)\
-                for s, a, p in self.states_query]
-            self.conn.executemany(self.update_prob_query, (new_values))
-
-
-        # TODO : put new probs in the self.queries / database based on db schema;
-        # CAUTION : need to see the better way to manage double down:
-        #   - add it always in self.queries and ignore it if self.turn != 1
-        #   - add to queries just the probs that are used (just s,h,u in case of self.turn != 1)
-
+            down = -reward / (len(probs) - 1)
+            action_idx = self.plays.index(self.action) + 1
+            new_values = [probs[i] + up if i == action_idx else probs[i] + down \
+                    for i in range(0, len(probs))]
+            if len(new_values) < 4:
+                new_values += [0]
+            new_values += [self.states_query[0]]
+            self.conn.execute(self.update_prob_query, (new_values))
 
     def payback(self, prize):
         self.result = 0
@@ -199,7 +194,7 @@ class StudentPlayer(Player):
         self.surrenders += 1 if self.result == 0.25 else 0
         
         # Just change the table while learning else read only
-        if self.create:
+        if self.create and self.turn > 0:
             # Update values on table
             reward = 0
             if self.action == 's':
