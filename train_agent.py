@@ -1,9 +1,14 @@
 import sqlite3
+import json
 from casino import main as casino_main
 
 def main():
     conn = sqlite3.connect('tables.sqlite')
-    table_name = 'StateAction'
+    # Read json config file
+    with open('settings.json') as data_file:    
+        configs = json.load(data_file)
+
+    table_name = configs['table_name']
     conn.execute('DROP TABLE IF EXISTS [' + table_name + ']')
     table_query = 'CREATE TABLE [' + table_name + '] (' + \
         '[StateID]          INTEGER PRIMARY KEY AUTOINCREMENT,' + \
@@ -25,9 +30,9 @@ def main():
     conn.executemany(states_query, states)
     conn.commit()
 
-    n_games = 50000000
+    n_games = configs['n_games']
     print("Training agent with " + str(n_games)+ ":")
-    casino_main(table_name=table_name, n_games=n_games, train=True)
+    casino_main(n_games=n_games)
 
 
 if __name__ == '__main__':

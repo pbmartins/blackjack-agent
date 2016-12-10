@@ -6,12 +6,17 @@ import math
 from player import Player
 from collections import defaultdict
 import sqlite3
+import json
 
 class StudentPlayer(Player):
-    def __init__(self, name="Meu nome", money=0, table_name='StateAction', n_games='10000000', train=False):
+    def __init__(self, name="Meu nome", money=0):
         super(StudentPlayer, self).__init__(name, money)
-        self.create = train
-        self.total_games = self.games_left = n_games
+        # Read json config file
+        with open('settings.json') as data_file:    
+            configs = dict(json.load(data_file))
+
+        self.create = configs['create']
+        self.total_games = self.games_left = configs['n_games']
         self.plays = ['s', 'h', 'u', 'd']
      
         # Wallet 
@@ -30,7 +35,7 @@ class StudentPlayer(Player):
         self.dont_play = 0
 
         # Create tables to save state-action average rewards
-        self.table_name = table_name
+        self.table_name = configs['table_name']
         self.conn = sqlite3.connect('tables.sqlite')
         self.get_prob_query = 'SELECT StateID, Action, Probability ' + \
                 'FROM ' + self.table_name + ' WHERE PlayerPoints=? ' + \
@@ -38,14 +43,14 @@ class StudentPlayer(Player):
         self.update_prob_query = 'UPDATE ' + self.table_name + ' SET Probability=?' + \
                 ' WHERE StateID=?'
         self.learning_rate = 0.015
+        self.bust_threshold = configs['bust_threshold']
 
         # Ignore rewards
         self.max_treshold = 0.98
-        self.min_treshold = 0.02
+        self.min_treshold = configs['min_threshold']
 
     def want_to_play(self, rules):
         self.rules = rules
-        self.queries = None
         self.action = None
         self.state = None
         self.turn = 0
@@ -104,20 +109,17 @@ class StudentPlayer(Player):
                     reward += 0.002 if state[0] < 22 else 0
                     reward += 0.005 if state[0] - state[1] > self.state[0] - self.state[1] else 0
                     reward += 0.008 if state[0] > state[1] else 0
-                reward = -0.015 if reward == 0 else reward
             elif self.action == 'd':
                 reward += 0.002 if state[0] < 22 else 0
                 reward += 0.013 if state[0] > state[1] else 0
-                reward = -0.015 if reward == 0 else reward
-            
+            reward = -0.015 if reward == 0 else reward
             # Adjust probabilities with new values based on reward
             self.adjust_probs(reward)
             
         self.state = state
         # Access table and search for the best probability based on state-action
-        states_query = self.conn.execute(self.get_prob_query, (self.state)).fetchall()
-        self.queries += [states_query]
-        probs = [prob for state_id, action, prob in states_query]
+        self.states_query = self.conn.execute(self.get_prob_query, (self.state)).fetchall()
+        probs = [prob for state_id, action, prob in self.states_query]
 
         if self.disable_dd and self.turn == 1:
             probs[1] += probs[3]
@@ -166,12 +168,15 @@ class StudentPlayer(Player):
     def adjust_probs(self, reward):
         probs = [prob for state_id, action, prob in self.queries[-1]]
         self.max_threshold = 1.0 - min_threshold * (len(probs) - 1)
-        if not any([p > self.max_threshold or p < self.min_threshold\
+        if not any([p > self.max_threshold or p < self.min_threshold \
                 for p in probs]):
             up = reward
             down = -reward / len(probs - 1)
             new_values = [(p + up, s) if self.action == a else (p + down, s)\
-                for s, a, p in states_query]
+                for s, a, p in self.states_query]
+            self.conn.executemany(self.update_prob_query, (new_values))
+
+
         # TODO : put new probs in the self.queries / database based on db schema;
         # CAUTION : need to see the better way to manage double down:
         #   - add it always in self.queries and ignore it if self.turn != 1
@@ -202,14 +207,13 @@ class StudentPlayer(Player):
             elif self.action == 'h' or (self.turn == 1 and self.action == 'd'):
                 reward += 0.002 if self.result > 0 else 0
                 reward += 0.013 if self.result == 1 else 0
-                reward = -0.015 if reward == 0 else reward
             elif self.action == 'u':
                 reward += 0.005 if self.state[1] + 7 <= 21 else 0
-                reward += 0.005 if self.p_bust() > 0.5 else 0
-                reward = -0.010 if reward == 0 else reward
+                reward += 0.005 if self.p_bust() > self.bust_threshold else 0
+            reward = -0.015 if reward == 0 else reward
                 
-                # Adjust probabilities with new values based on reward
-                self.adjust_probs(reward)
+            # Adjust probabilities with new values based on reward
+            self.adjust_probs(reward)
 
             print(self.total_games - self.games_left)
         

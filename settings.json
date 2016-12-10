@@ -1,0 +1,1 @@
+{"n_tests": 1000, "n_games": 10000000, "table_name": "StateAction", "create": true, "min_threshold": 0.02, "pocket": 1000, "bust_threshold": 0.5}
