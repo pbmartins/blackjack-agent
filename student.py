@@ -37,21 +37,15 @@ class StudentPlayer(Player):
                 'AND DealerPoints=? AND SoftHand=? AND FirstTurn=?'
         self.update_prob_query = 'UPDATE ' + self.table_name + ' SET Probability=?' + \
                 ' WHERE StateID=?'
-
-        self.rewards = {
-                's': [0.015]
-                'h': [0.002, 0.005, 0.008],
-                'u': [0.005, 0.005],
-                'd': [0.002, 0.005, 0.008]
-                }
         self.learning_rate = 0.015
-        self.damage_rate = 0.6
-        self.damage = 1
+
+        # Ignore rewards
+        self.max_treshold = 0.98
+        self.min_treshold = 0.02
 
     def want_to_play(self, rules):
         self.rules = rules
-        self.results = []
-        self.query = None
+        self.queries = None
         self.action = None
         self.state = None
         self.turn = 0
@@ -92,10 +86,9 @@ class StudentPlayer(Player):
 
         # Get players' total
         self.player_value = card.value(player_hand)
-        player_ace = len([c for c in player_hand if c.is_ace()]) >= 1
         self.dealer_value = card.value(dealer.hand)
+        player_ace = len([c for c in player_hand if c.is_ace()]) >= 1
 
-        actions = self.plays if self.turn == 1 else self.plays[:-1]
         state = (self.player_value, self.dealer_value, player_ace, self.turn == 1)
 
         # Update values on table
@@ -103,33 +96,32 @@ class StudentPlayer(Player):
         if self.create and self.turn > 1:
             if self.action == 's':
                 reward = 0.015 if state[0] > state[1] else -0.015
-            elif self.action == 'h' or self.action == 'd':
+            elif self.action == 'h':
                 if self.state[0] > self.state[1]:
-                    reward += 0.002 if state[0] < 22
+                    reward += 0.002 if state[0] < 22 else 0
                     reward += 0.013 if state[0] - state[1] > self.state[0] - self.state[1] else 0
                 else:
-                    reward += 0.002 if state[0] < 22
+                    reward += 0.002 if state[0] < 22 else 0
                     reward += 0.005 if state[0] - state[1] > self.state[0] - self.state[1] else 0
-                    reward += 0.008 if state[0] > state[1]
+                    reward += 0.008 if state[0] > state[1] else 0
                 reward = -0.015 if reward == 0 else reward
-            elif self.action == 'u':
-                reward += 0.005 if state[1] + 7 > 21 else 0
-                reward += 0.005 if self.p_bust > 0.5 else 0
-                reward = -0.010 if reward == 0 else reward
-
-
-
-
-
+            elif self.action == 'd':
+                reward += 0.002 if state[0] < 22 else 0
+                reward += 0.013 if state[0] > state[1] else 0
+                reward = -0.015 if reward == 0 else reward
+            
+            # Adjust probabilities with new values based on reward
+            self.adjust_probs(reward)
+            
         self.state = state
-        # Access qtable and search for the best probability based on state-action
+        # Access table and search for the best probability based on state-action
         states_query = self.conn.execute(self.get_prob_query, (self.state)).fetchall()
-        self.query = states_query
+        self.queries += [states_query]
         probs = [prob for state_id, action, prob in states_query]
 
-        ##### REVER ISTO ######
-        if not self.create and self.turn == 1 and self.disable_dd:
+        if self.disable_dd and self.turn == 1:
             probs[1] += probs[3]
+            probs[-1:] = []
 
         intervals = [sum(probs[:idx]) for idx in range(1, len(probs) + 1)]
         r = random.uniform(0, 1)
@@ -138,11 +130,15 @@ class StudentPlayer(Player):
             idx += 1
 
         self.action = self.plays[idx]
-        #self.results += [(state, action)]
         return self.action
 
     def bet(self, dealer, players): 
         self.disable_dd = False
+
+        if self.create:
+            self.bet_value = 2
+            return self.bet_value
+
         # Compute bet
         if self.wallet >= (self.initial_wallet * 0.50):
             self.bet_value = int(self.wallet * 0.1)
@@ -158,39 +154,29 @@ class StudentPlayer(Player):
         elif self.bet_value < self.rules.min_bet:
             self.bet_value = self.rules.min_bet
         
-        self.bet_value = 2
+        # Bet shouldn't be less than 2 so that we can earn money from surrender
+        self.bet_value = 2 if self.bet_value < 2 else self.bet_value
+
         return self.bet_value
-
-
-    def get_up_down(self, div, good_surr):
-        up = self.learning_rate * self.damage
-        down = -self.learning_rate * self.damage / div
-        if self.result == 1:
-            return up, down
-        if self.result == 0:
-            return -up, -down
-        elif self.result == 0.25:
-            return (-up, -down) if not good_surr else (up / 3, down / 3)
-        else:
-            return 0, 0
-
+    
     def p_bust(self):
         scenarios = [self.player_value + c for c in list(range(1, 12)) + [10, 10, 10]]
         return len([v for v in scenarios if v > 21]) / len(scenarios)
+    
+    def adjust_probs(self, reward):
+        probs = [prob for state_id, action, prob in self.queries[-1]]
+        self.max_threshold = 1.0 - min_threshold * (len(probs) - 1)
+        if not any([p > self.max_threshold or p < self.min_threshold\
+                for p in probs]):
+            up = reward
+            down = -reward / len(probs - 1)
+            new_values = [(p + up, s) if self.action == a else (p + down, s)\
+                for s, a, p in states_query]
+        # TODO : put new probs in the self.queries / database based on db schema;
+        # CAUTION : need to see the better way to manage double down:
+        #   - add it always in self.queries and ignore it if self.turn != 1
+        #   - add to queries just the probs that are used (just s,h,u in case of self.turn != 1)
 
-
-    def good_surrender(self):
-        new_dealer_points = self.dealer_value + 7
-        if new_dealer_points > 21:
-            return 0
-
-        p_bust = self.p_bust()
-        threshold = 0.55
-        if new_dealer_points > self.player_value:
-            return 1 if p_bust > threshold else 0
-        else:
-            return 0
-      
 
     def payback(self, prize):
         self.result = 0
@@ -201,43 +187,30 @@ class StudentPlayer(Player):
         else:
             self.result = 0.5
 
+        # Update statistics
         self.wins += 1 if self.result == 1 else 0
         self.defeats += 1 if self.result == 0 else 0
         self.draws += 1 if self.result == 0.5 else 0
         self.surrenders += 1 if self.result == 0.25 else 0
         
-        # just change the table while learning else read only
+        # Just change the table while learning else read only
         if self.create:
-            # Update qtable with the results of the current game
-            self.damage = 1
-            dd = 0.25
-            min_threshold = 0.02
-            good_surr = 0.0
-            for i in reversed(range(len(self.results))):
-                state, action = self.results[i]
-                good_surr = self.good_surrender() if action == 'u' else good_surr
+            # Update values on table
+            reward = 0
+            if self.action == 's':
+                reward = 0.015 if self.result == 1 else -0.015
+            elif self.action == 'h' or (self.turn == 1 and self.action == 'd'):
+                reward += 0.002 if self.result > 0 else 0
+                reward += 0.013 if self.result == 1 else 0
+                reward = -0.015 if reward == 0 else reward
+            elif self.action == 'u':
+                reward += 0.005 if self.state[1] + 7 <= 21 else 0
+                reward += 0.005 if self.p_bust() > 0.5 else 0
+                reward = -0.010 if reward == 0 else reward
                 
-                default = 0.25 if i == 0 else 1/3
+                # Adjust probabilities with new values based on reward
+                self.adjust_probs(reward)
 
-                # Get probabilities and filter values between 0.02 and 0.98
-                actions = self.plays if self.turn == 1 else self.plays[:-1]
-                states_query = self.queries[i]
-                probs = [prob for state_id, action, prob in states_query]
-
-                max_threshold = 1.0 - min_threshold * (len(probs) - 1)
-                skip = False
-                if any([p > max_threshold or p < min_threshold for p in probs]):
-                    continue
-
-                up, down = self.get_up_down(len(probs) - 1, good_surr)
-                new_values = [(p + up, s) if action == a else (p + down, s) \
-                        for s, a, p in states_query]
-
-                self.conn.executemany(self.update_prob_query, new_values)
-                self.conn.commit()
-
-                self.damage *= self.damage_rate
-                
             print(self.total_games - self.games_left)
         
         # Update game values
