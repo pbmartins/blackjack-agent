@@ -16,7 +16,7 @@ class StudentPlayer(Player):
             configs = dict(json.load(data_file))
 
         self.create = configs['create']
-        self.total_games = self.games_left = configs['n_games']
+        self.total_games = self.games_left = configs['n_games'] if self.create else configs['n_tests']
         self.plays = ['s', 'h', 'u', 'd']
      
         # Wallet 
@@ -43,11 +43,14 @@ class StudentPlayer(Player):
         self.update_prob_query = 'UPDATE ' + self.table_name + \
                 ' SET Stand=?, Hit=?, Surrender=?, DoubleDown=? ' + \
                 'WHERE StateID=?'
+        self.db_counter = 500000
         self.learning_rate = 0.015
         self.bust_threshold = configs['bust_threshold']
+        self.probs_threshold = configs['probs_threshold']
 
         # Ignore rewards
-        self.min_treshold = configs['min_threshold']
+        self.min_threshold = configs['min_threshold']
+
 
     def want_to_play(self, rules):
         self.rules = rules
@@ -123,6 +126,19 @@ class StudentPlayer(Player):
             probs[1] += probs[3]
             probs[-1:] = []
 
+        if not self.create:
+            max_prob = max(probs)
+            max_idx = probs.index(max_prob)
+            total = []
+            for i in range(len(probs)):
+                if max_idx != i:
+                    if max_prob - probs[i] > self.probs_threshold:
+                        total += [probs[i]]
+                        probs[i] = 0
+            s = sum(total) / (len(probs) - len(total))
+            probs = [p + s if p != 0 else p for p in probs]
+                    
+
         intervals = [sum(probs[:idx]) for idx in range(1, len(probs) + 1)]
         r = random.uniform(0, 1)
         idx = 0
@@ -130,6 +146,9 @@ class StudentPlayer(Player):
             idx += 1
 
         self.action = self.plays[idx]
+        #if self.action == 'u':
+        #    print(self.state)
+        #    print(self.states_query)
         return self.action
 
     def bet(self, dealer, players): 
@@ -165,17 +184,17 @@ class StudentPlayer(Player):
     
     def adjust_probs(self, reward):
         probs = self.states_query[1:] if self.states_query[-1] != 0 else self.states_query[1:-1]
-        max_treshold = 1.0 - self.min_treshold * (len(probs) - 1)
-        if min(probs) >= self.min_treshold and max(probs) <= max_treshold:
+        max_threshold = 1.0 - self.min_threshold * (len(probs) - 1)
+        if min(probs) >= self.min_threshold and max(probs) <= max_threshold:
             up = reward
             down = -reward / (len(probs) - 1)
             action_idx = self.plays.index(self.action)
             new_values = [probs[i] + up if i == action_idx else probs[i] + down \
-                    for i in range(0, len(probs))]
-            if len(new_values) < 4:
-                new_values += [0]
-            new_values += [self.states_query[0]]
+                    for i in range(len(probs))]
+            new_values += [0, self.states_query[0]] \
+                    if len(new_values) < 4 else [self.states_query[0]]
             self.conn.execute(self.update_prob_query, (new_values))
+            self.conn.commit()
 
     def payback(self, prize):
         self.result = 0
@@ -202,8 +221,10 @@ class StudentPlayer(Player):
                 reward += 0.002 if self.result > 0 else 0
                 reward += 0.013 if self.result == 1 else 0
             elif self.action == 'u':
-                reward += 0.005 if self.state[1] + 7 <= 21 else 0
-                reward += 0.005 if self.p_bust() > self.bust_threshold else 0
+                if self.state[0] > 10:
+                    if self.state[1] + 7 <= 21 and self.state[0] < self.state[1] + 7:
+                        reward += 0.003 
+                        reward += 0.003 if self.p_bust() > self.bust_threshold else 0
             reward = -0.015 if reward == 0 else reward
                 
             # Adjust probabilities with new values based on reward
