@@ -44,7 +44,6 @@ class StudentPlayer(Player):
                 ' SET Stand=?, Hit=?, Surrender=?, DoubleDown=? ' + \
                 'WHERE StateID=?'
         self.db_counter = 500000
-        self.learning_rate = 0.015
         self.bust_threshold = configs['bust_threshold']
         self.probs_threshold = configs['probs_threshold']
 
@@ -101,18 +100,25 @@ class StudentPlayer(Player):
         reward = 0
         if self.create and self.turn > 1:
             if self.action == 's':
+                ### Na primeira jogada, termos 13 e o dealer 3 (3+7=10 < 13), o stand irá ser
+                # aceitável na maioria das vezes, mas aqui deveria ser feito alguns double-down
                 reward = 0.015 if state[0] > state[1] else -0.015
+                #### TEST ####
+                if self.state[0] < 14:
+                    reward += 0.005 if state[0] > state[1] + 7 else 0
+                else:
+                    reward += 0.015 if state[0] > state[1] + 7 else 0
             elif self.action == 'h':
                 if self.state[0] > self.state[1]:
                     reward += 0.002 if state[0] < 22 else 0
-                    reward += 0.013 if state[0] - state[1] > self.state[0] - self.state[1] else 0
+                    reward += 0.013 if state[0] - state[1] + 7 > self.state[0] - self.state[1] + 7 else 0
                 else:
                     reward += 0.002 if state[0] < 22 else 0
-                    reward += 0.005 if state[0] - state[1] > self.state[0] - self.state[1] else 0
-                    reward += 0.008 if state[0] > state[1] else 0
+                    reward += 0.005 if state[0] - state[1] + 7 > self.state[0] - self.state[1] + 7 else 0
+                    reward += 0.008 if state[0] > state[1] + 7 else 0
             elif self.action == 'd':
                 reward += 0.002 if state[0] < 22 else 0
-                reward += 0.013 if state[0] > state[1] else 0
+                reward += 0.013 if state[0] > state[1] + 7 else 0
             reward = -0.015 if reward == 0 else reward
             # Adjust probabilities with new values based on reward
             self.adjust_probs(reward)
@@ -131,10 +137,9 @@ class StudentPlayer(Player):
             max_idx = probs.index(max_prob)
             total = []
             for i in range(len(probs)):
-                if max_idx != i:
-                    if max_prob - probs[i] > self.probs_threshold:
-                        total += [probs[i]]
-                        probs[i] = 0
+                if max_idx != i and max_prob - probs[i] > self.probs_threshold:
+                    total += [probs[i]]
+                    probs[i] = 0
             s = sum(total) / (len(probs) - len(total))
             probs = [p + s if p != 0 else p for p in probs]
                     
@@ -146,9 +151,6 @@ class StudentPlayer(Player):
             idx += 1
 
         self.action = self.plays[idx]
-        #if self.action == 'u':
-        #    print(self.state)
-        #    print(self.states_query)
         return self.action
 
     def bet(self, dealer, players): 
@@ -194,7 +196,7 @@ class StudentPlayer(Player):
             new_values += [0, self.states_query[0]] \
                     if len(new_values) < 4 else [self.states_query[0]]
             self.conn.execute(self.update_prob_query, (new_values))
-            self.conn.commit()
+            #self.conn.commit()
 
     def payback(self, prize):
         self.result = 0
@@ -223,8 +225,7 @@ class StudentPlayer(Player):
             elif self.action == 'u':
                 if self.state[0] > 10:
                     if self.state[1] + 7 <= 21 and self.state[0] < self.state[1] + 7:
-                        reward += 0.003 
-                        reward += 0.003 if self.p_bust() > self.bust_threshold else 0
+                        reward += 0.005 if self.p_bust() > self.bust_threshold else 0
             reward = -0.015 if reward == 0 else reward
                 
             # Adjust probabilities with new values based on reward
@@ -242,6 +243,7 @@ class StudentPlayer(Player):
             self.end()
 
     def end(self):
+        self.conn.commit()
         self.my_pocket += self.wallet
         self.initial_wallet = self.wallet = 0
         print("Number of victories: " + str(self.wins))

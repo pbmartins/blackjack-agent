@@ -1,1 +1,1 @@
-{"n_tests": 1000, "n_games": 3000000, "table_name": "StateAction", "create": false, "min_threshold": 0.02, "pocket": 1000, "bust_threshold": 0.5, "probs_threshold": 0.15}
+{"n_tests": 1000, "n_games": 3000000, "table_name": "StateAction3M", "create": false, "min_threshold": 0.02, "pocket": 1000, "bust_threshold": 0.5, "probs_threshold": 0.12}
