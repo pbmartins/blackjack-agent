@@ -138,7 +138,7 @@ class StudentPlayer(Player):
             for i in range(len(probs)):
                 if max_idx != i and max_prob - probs[i] > self.probs_threshold:
                     total += [probs[i]]
-                    probs[i] = 0
+                    probs[i] = 0.0
             s = sum(total) / (len(probs) - len(total))
             probs = [p + s if p != 0 else p for p in probs]
                     
