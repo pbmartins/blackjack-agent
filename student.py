@@ -33,6 +33,8 @@ class StudentPlayer(Player):
         self.draws = 0
         self.surrenders = 0
         self.dont_play = 0
+        self.dd = 0
+        self.good_dd = 0
 
         # Create tables to save state-action average rewards
         self.table_name = configs['table_name']
@@ -84,15 +86,15 @@ class StudentPlayer(Player):
 
     def play(self, dealer, players):
         # Get player hand
-        player_hand = [p.hand for p in players if p.player.name == self.name][0]
+        self.player_hand = [p.hand for p in players if p.player.name == self.name][0]
 
         # Increment turn
         self.turn += 1
 
         # Get players' total
-        self.player_value = card.value(player_hand)
+        self.player_value = card.value(self.player_hand)
         self.dealer_value = card.value(dealer.hand)
-        player_ace = len([c for c in player_hand if c.is_ace()]) >= 1
+        player_ace = len([c for c in self.player_hand if c.is_ace()]) >= 1
 
         state = (self.player_value, self.dealer_value, player_ace, self.turn == 1)
 
@@ -104,21 +106,18 @@ class StudentPlayer(Player):
                 # aceitável na maioria das vezes, mas aqui deveria ser feito alguns double-down
                 reward = 0.015 if state[0] > state[1] else -0.015
                 #### TEST ####
-                if self.state[0] < 14:
-                    reward += 0.005 if state[0] > state[1] + 7 else 0
-                else:
-                    reward += 0.015 if state[0] > state[1] + 7 else 0
+                #if self.state[0] < 14:
+                #    reward += 0.005 if state[0] > state[1] + 7 else 0
+                #else:
+                #    reward += 0.015 if state[0] > state[1] + 7 else 0
             elif self.action == 'h':
                 if self.state[0] > self.state[1]:
                     reward += 0.002 if state[0] < 22 else 0
-                    reward += 0.013 if state[0] - state[1] + 7 > self.state[0] - self.state[1] + 7 else 0
+                    reward += 0.013 if state[0] - (state[1]) > self.state[0] - (self.state[1]) else 0
                 else:
                     reward += 0.002 if state[0] < 22 else 0
-                    reward += 0.005 if state[0] - state[1] + 7 > self.state[0] - self.state[1] + 7 else 0
-                    reward += 0.008 if state[0] > state[1] + 7 else 0
-            elif self.action == 'd':
-                reward += 0.002 if state[0] < 22 else 0
-                reward += 0.013 if state[0] > state[1] + 7 else 0
+                    reward += 0.005 if state[0] - (state[1]) > self.state[0] - (self.state[1]) else 0
+                    reward += 0.008 if state[0] > state[1] else 0
             reward = -0.015 if reward == 0 else reward
             # Adjust probabilities with new values based on reward
             self.adjust_probs(reward)
@@ -181,7 +180,8 @@ class StudentPlayer(Player):
         return self.bet_value
     
     def p_bust(self):
-        scenarios = [self.player_value + c for c in list(range(1, 12)) + [10, 10, 10]]
+        all_cards = [card.Card(rank=r) for r in range(1, 14)]
+        scenarios = [card.value(self.player_hand + [c]) for c in all_cards]
         return len([v for v in scenarios if v > 21]) / len(scenarios)
     
     def adjust_probs(self, reward):
@@ -220,6 +220,9 @@ class StudentPlayer(Player):
             if self.action == 's':
                 reward = 0.015 if self.result == 1 else -0.015
             elif self.action == 'h' or (self.turn == 1 and self.action == 'd'):
+                if self.action == 'd':
+                    self.good_dd += 1 if self.result == 1 else 0
+                    self.dd += 1
                 reward += 0.002 if self.result > 0 else 0
                 reward += 0.013 if self.result == 1 else 0
             elif self.action == 'u':
@@ -251,4 +254,6 @@ class StudentPlayer(Player):
         print("Number of draws: " + str(self.draws))
         print("Number of surrenders: " + str(self.surrenders))
         print("Number of games passed: " + str(self.dont_play))
+        print("Number of double downs: " + str(self.dd))
+        print("Number of good dds: " + str(self.good_dd))
 
