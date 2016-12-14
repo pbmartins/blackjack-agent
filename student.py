@@ -24,7 +24,7 @@ class StudentPlayer(Player):
         self.my_pocket = self.pocket
         self.initial_wallet = self.wallet = int(self.my_pocket * self.loans[0])
         self.my_pocket -= self.initial_wallet
-        
+
         self.disable_dd = False
 
         # Counting stats
