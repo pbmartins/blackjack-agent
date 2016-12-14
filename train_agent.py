@@ -14,7 +14,7 @@ def main():
         '[StateID]          INTEGER PRIMARY KEY AUTOINCREMENT,' + \
         '[PlayerPoints]     INTEGER NOT NULL,' + \
         '[DealerPoints]     INTEGER NOT NULL,' + \
-        '[HardHand]         INTEGER NOT NULL,' + \
+        '[SoftHand]         INTEGER NOT NULL,' + \
         '[FirstTurn]        INTEGER NOT NULL,' + \
         '[Stand]            REAL NOT NULL,' + \
         '[Hit]              REAL NOT NULL,' + \
@@ -26,7 +26,7 @@ def main():
     states = [(pp, dp, sh, ft, p(ft), p(ft), p(ft), dd(ft)) for pp in range(3, 22) \
             for dp in range(2, 22) for sh in [0, 1] for ft in [0, 1]]
     states_query = 'INSERT OR IGNORE INTO ' + table_name + \
-        ' (PlayerPoints, DealerPoints, HardHand, FirstTurn, Stand, Hit, Surrender, DoubleDown)' + \
+        ' (PlayerPoints, DealerPoints, SoftHand, FirstTurn, Stand, Hit, Surrender, DoubleDown)' + \
         ' VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     conn.executemany(states_query, states)
     conn.commit()

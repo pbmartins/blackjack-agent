@@ -41,7 +41,7 @@ class StudentPlayer(Player):
         self.conn = sqlite3.connect('tables.sqlite')
         self.get_prob_query = 'SELECT StateID, Stand, Hit, Surrender, DoubleDown ' + \
                 'FROM ' + self.table_name + ' WHERE PlayerPoints=? ' + \
-                'AND DealerPoints=? AND HardHand=? AND FirstTurn=?'
+                'AND DealerPoints=? AND SoftHand=? AND FirstTurn=?'
         self.update_prob_query = 'UPDATE ' + self.table_name + \
                 ' SET Stand=?, Hit=?, Surrender=?, DoubleDown=? ' + \
                 'WHERE StateID=?'
@@ -94,9 +94,16 @@ class StudentPlayer(Player):
         # Get players' total
         self.player_value = card.value(self.player_hand)
         self.dealer_value = card.value(dealer.hand)
-        player_ace = len([c for c in self.player_hand if c.is_ace()]) >= 1
 
-        state = (self.player_value, self.dealer_value, player_ace, self.turn == 1)
+        player_ace = len([c for c in self.player_hand if c.is_ace()])
+        player_sum = [c.value() for c in self.player_hand]
+        soft_hand = 0
+        if player_ace > 1:
+            soft_hand = 1
+        elif player_ace == 1:
+            soft_hand = int(player_sum == self.player_value)
+
+        state = (self.player_value, self.dealer_value, soft_hand, self.turn == 1)
 
         # Update last query
         reward = 0
@@ -104,20 +111,20 @@ class StudentPlayer(Player):
             if self.action == 's':
                 ### Na primeira jogada, termos 13 e o dealer 3 (3+7=10 < 13), o stand irá ser
                 # aceitável na maioria das vezes, mas aqui deveria ser feito alguns double-down
-                reward = 0.015 if state[0] > state[1] else -0.015
+                reward = 0.015 if state[0] > state[1] + 7 else -0.015
                 #### TEST ####
                 #if self.state[0] < 14:
                 #    reward += 0.005 if state[0] > state[1] + 7 else 0
                 #else:
                 #    reward += 0.015 if state[0] > state[1] + 7 else 0
             elif self.action == 'h':
-                if self.state[0] > self.state[1]:
+                if self.state[0] > self.state[1] + 7:
                     reward += 0.002 if state[0] < 22 else 0
-                    reward += 0.013 if state[0] - (state[1]) > self.state[0] - (self.state[1]) else 0
+                    reward += 0.013 if state[0] - (state[1] + 7) > self.state[0] - (self.state[1] + 7) else 0
                 else:
                     reward += 0.002 if state[0] < 22 else 0
-                    reward += 0.005 if state[0] - (state[1]) > self.state[0] - (self.state[1]) else 0
-                    reward += 0.008 if state[0] > state[1] else 0
+                    reward += 0.005 if state[0] - (state[1] + 7) > self.state[0] - (self.state[1] + 7) else 0
+                    reward += 0.008 if state[0] > state[1] + 7 else 0
             reward = -0.015 if reward == 0 else reward
             # Adjust probabilities with new values based on reward
             self.adjust_probs(reward)
@@ -227,14 +234,14 @@ class StudentPlayer(Player):
                 reward += 0.013 if self.result == 1 else 0
             elif self.action == 'u':
                 if self.state[0] > 10:
-                    if self.state[1] + 7 <= 21 and self.state[0] < self.state[1] + 7:
+                    if self.state[1] <= 21 and self.state[0] < self.state[1]:
                         reward += 0.005 if self.p_bust() > self.bust_threshold else 0
             reward = -0.015 if reward == 0 else reward
                 
             # Adjust probabilities with new values based on reward
             self.adjust_probs(reward)
 
-            print(self.total_games - self.games_left)
+            print(self.total_games - self.games_left, end='\r')
         
         # Update game values
         self.table = 0
