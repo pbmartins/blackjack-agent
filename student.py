@@ -39,11 +39,11 @@ class StudentPlayer(Player):
         # Create tables to save state-action average rewards
         self.table_name = configs['table_name']
         self.conn = sqlite3.connect('tables.sqlite')
-        self.get_prob_query = 'SELECT StateID, Stand, Hit, Surrender, DoubleDown ' + \
+        self.get_prob_query = 'SELECT StateID, Stand, Hit, Games ' + \
                 'FROM ' + self.table_name + ' WHERE PlayerPoints=? ' + \
-                'AND DealerPoints=? AND SoftHand=? AND FirstTurn=?'
+                'AND DealerPoints=? AND SoftHand=? AND FirstTurn=? AND PlayerAce=?'
         self.update_prob_query = 'UPDATE ' + self.table_name + \
-                ' SET Stand=?, Hit=?, Surrender=?, DoubleDown=? ' + \
+                ' SET Stand=?, Hit=?, Games=? ' + \
                 'WHERE StateID=?'
         self.db_counter = 500000
         self.bust_threshold = configs['bust_threshold']
@@ -58,6 +58,7 @@ class StudentPlayer(Player):
         self.action = None
         self.state = None
         self.turn = 0
+        self.queries = []
        
         if self.create:
             return True
@@ -87,6 +88,7 @@ class StudentPlayer(Player):
     def play(self, dealer, players):
         # Get player hand
         self.player_hand = [p.hand for p in players if p.player.name == self.name][0]
+        self.dealer_hand = dealer.hand
 
         # Increment turn
         self.turn += 1
@@ -96,67 +98,65 @@ class StudentPlayer(Player):
         self.dealer_value = card.value(dealer.hand)
 
         player_ace = len([c for c in self.player_hand if c.is_ace()])
-        player_sum = [c.value() for c in self.player_hand]
+        player_sum = sum([c.value() for c in self.player_hand])
         soft_hand = 0
         if player_ace > 1:
             soft_hand = 1
         elif player_ace == 1:
             soft_hand = int(player_sum == self.player_value)
 
-        state = (self.player_value, self.dealer_value, soft_hand, self.turn == 1)
+        state = (self.player_value, self.dealer_value, soft_hand, self.turn == 1, player_ace > 0)            
 
-        # Update last query
-        reward = 0
-        if self.create and self.turn > 1:
-            if self.action == 's':
-                ### Na primeira jogada, termos 13 e o dealer 3 (3+7=10 < 13), o stand irá ser
-                # aceitável na maioria das vezes, mas aqui deveria ser feito alguns double-down
-                reward = 0.015 if state[0] > state[1] + 7 else -0.015
-                #### TEST ####
-                #if self.state[0] < 14:
-                #    reward += 0.005 if state[0] > state[1] + 7 else 0
-                #else:
-                #    reward += 0.015 if state[0] > state[1] + 7 else 0
-            elif self.action == 'h':
-                if self.state[0] > self.state[1] + 7:
-                    reward += 0.002 if state[0] < 22 else 0
-                    reward += 0.013 if state[0] - (state[1] + 7) > self.state[0] - (self.state[1] + 7) else 0
-                else:
-                    reward += 0.002 if state[0] < 22 else 0
-                    reward += 0.005 if state[0] - (state[1] + 7) > self.state[0] - (self.state[1] + 7) else 0
-                    reward += 0.008 if state[0] > state[1] + 7 else 0
-            reward = -0.015 if reward == 0 else reward
-            # Adjust probabilities with new values based on reward
-            self.adjust_probs(reward)
-            
         self.state = state
+
         # Access table and search for the best probability based on state-action
         self.states_query = list(self.conn.execute(self.get_prob_query, (self.state)).fetchall()[0])
-        probs = self.states_query[1:]
+        games = self.states_query[1:]
+        wins = games[:-1]
+        #print(self.state)
+        #print(games)
+        #print(sum(wins)/games[-1])
+        if sum(wins) == 0:
+            probs = [0.5, 0.5]
+        else:
+            probs = [g / sum(wins) for g in wins]
         
-        if self.disable_dd and self.turn == 1:
-            probs[1] += probs[3]
-            probs[-1:] = []
+        #if self.disable_dd and self.turn == 1:
+        #    probs = [(games[i] + games[-1]) / sum(games) if i == 1 else games[i] / sum(games) \
+        #            for i in range(games - 1)]
 
-        if not self.create:
-            max_prob = max(probs)
-            max_idx = probs.index(max_prob)
-            total = []
-            for i in range(len(probs)):
-                if max_idx != i and max_prob - probs[i] > self.probs_threshold:
-                    total += [probs[i]]
-                    probs[i] = 0.0
-            s = sum(total) / (len(probs) - len(total))
-            probs = [p + s if p != 0 else p for p in probs]
+        max_prob = 0
+        #if not self.create:
+        #    max_prob = max(probs)
+        #    max_idx = probs.index(max_prob)
+        #    total = []
+        #    for i in range(len(probs)):
+        #        if max_idx != i and max_prob - probs[i] > self.probs_threshold:
+        #            total += [probs[i]]
+        #            probs[i] = 0.0
+        #    s = sum(total) / (len(probs) - len(total))
+        #    probs = [p + s if p != 0 else p for p in probs]
                     
 
         intervals = [sum(probs[:idx]) for idx in range(1, len(probs) + 1)]
-        r = random.uniform(0, 1)
+        #print(intervals)
+        r = random.random()
         idx = 0
         while intervals[idx] < r:
             idx += 1
 
         self.action = self.plays[idx]
+        self.queries += [(self.states_query, self.action)]
+        if not self.create:
+            if self.turn == 1 and wins[1] / games[-1] > 0.75:
+                #print(self.state)
+                #print(games)
+                #print(wins[1] / games[-1])
+                self.action = 'd'
+            if sum(wins) / games[-1] < 0.2:
+                #print(games)
+                #print(state)
+                self.action = 'u'
         return self.action
 
     def bet(self, dealer, players): 
@@ -191,20 +191,6 @@ class StudentPlayer(Player):
         scenarios = [card.value(self.player_hand + [c]) for c in all_cards]
         return len([v for v in scenarios if v > 21]) / len(scenarios)
     
-    def adjust_probs(self, reward):
-        probs = self.states_query[1:] if self.states_query[-1] != 0 else self.states_query[1:-1]
-        max_threshold = 1.0 - self.min_threshold * (len(probs) - 1)
-        if min(probs) >= self.min_threshold and max(probs) <= max_threshold:
-            up = reward
-            down = -reward / (len(probs) - 1)
-            action_idx = self.plays.index(self.action)
-            new_values = [probs[i] + up if i == action_idx else probs[i] + down \
-                    for i in range(len(probs))]
-            new_values += [0, self.states_query[0]] \
-                    if len(new_values) < 4 else [self.states_query[0]]
-            self.conn.execute(self.update_prob_query, (new_values))
-            #self.conn.commit()
-
     def payback(self, prize):
         self.result = 0
         if prize > 0:
@@ -219,27 +205,22 @@ class StudentPlayer(Player):
         self.defeats += 1 if self.result == 0 else 0
         self.draws += 1 if self.result == 0.5 else 0
         self.surrenders += 1 if self.result == 0.25 else 0
+        self.dd += 1 if not self.create and self.action == 'd' else 0
+        self.good_dd += 1 if not self.create and self.result == 1 and self.action == 'd' else 0
         
         # Just change the table while learning else read only
         if self.create and self.turn > 0:
             # Update values on table
             reward = 0
-            if self.action == 's':
-                reward = 0.015 if self.result == 1 else -0.015
-            elif self.action == 'h' or (self.turn == 1 and self.action == 'd'):
-                if self.action == 'd':
-                    self.good_dd += 1 if self.result == 1 else 0
-                    self.dd += 1
-                reward += 0.002 if self.result > 0 else 0
-                reward += 0.013 if self.result == 1 else 0
-            elif self.action == 'u':
-                if self.state[0] > 10:
-                    if self.state[1] <= 21 and self.state[0] < self.state[1]:
-                        reward += 0.005 if self.p_bust() > self.bust_threshold else 0
-            reward = -0.015 if reward == 0 else reward
-                
-            # Adjust probabilities with new values based on reward
-            self.adjust_probs(reward)
+            if self.action == 's' or self.action == 'h':
+                reward = 1 if self.result == 1 else 0
+
+            for query, action in self.queries:
+                games = self.states_query[1:]
+                games[self.plays.index(action)] += reward
+                games[-1] += 1
+                query = games + [self.states_query[0]]
+                self.conn.execute(self.update_prob_query, (query))
 
             print(self.total_games - self.games_left, end='\r')
         
