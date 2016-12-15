@@ -45,7 +45,6 @@ class StudentPlayer(Player):
         self.update_prob_query = 'UPDATE ' + self.table_name + \
                 ' SET Stand=?, Hit=?, Surrender=?, DoubleDown=? ' + \
                 'WHERE StateID=?'
-        self.db_counter = 500000
         self.bust_threshold = configs['bust_threshold']
         self.probs_threshold = configs['probs_threshold']
 
@@ -96,7 +95,7 @@ class StudentPlayer(Player):
         self.dealer_value = card.value(dealer.hand)
 
         player_ace = len([c for c in self.player_hand if c.is_ace()])
-        player_sum = [c.value() for c in self.player_hand]
+        player_sum = sum([c.value() for c in self.player_hand])
         soft_hand = 0
         if player_ace > 1:
             soft_hand = 1
@@ -109,22 +108,17 @@ class StudentPlayer(Player):
         reward = 0
         if self.create and self.turn > 1:
             if self.action == 's':
-                ### Na primeira jogada, termos 13 e o dealer 3 (3+7=10 < 13), o stand irá ser
-                # aceitável na maioria das vezes, mas aqui deveria ser feito alguns double-down
-                reward = 0.015 if state[0] > state[1] + 7 else -0.015
-                #### TEST ####
-                #if self.state[0] < 14:
-                #    reward += 0.005 if state[0] > state[1] + 7 else 0
-                #else:
-                #    reward += 0.015 if state[0] > state[1] + 7 else 0
-            elif self.action == 'h':
-                if self.state[0] > self.state[1] + 7:
-                    reward += 0.002 if state[0] < 22 else 0
-                    reward += 0.013 if state[0] - (state[1] + 7) > self.state[0] - (self.state[1] + 7) else 0
+                reward = 0.015 if state[0] > state[1] else 0
+            elif self.action == 'h' and state[0] < 22:
+                reward += 0.002
+                if self.state[0] > self.state[1]:
+                    if state[0] > state[1]:
+                        reward += 0.008 if state[0] - state[1] > self.state[0] - self.state[1] else 0
                 else:
-                    reward += 0.002 if state[0] < 22 else 0
-                    reward += 0.005 if state[0] - (state[1] + 7) > self.state[0] - (self.state[1] + 7) else 0
-                    reward += 0.008 if state[0] > state[1] + 7 else 0
+                    if state[0] > state[1]:
+                        reward += 0.013
+                    else:
+                        reward += 0.005 if abs(state[0] - state[1]) < abs(self.state[0] - self.state[1]) else 0
             reward = -0.015 if reward == 0 else reward
             # Adjust probabilities with new values based on reward
             self.adjust_probs(reward)
@@ -148,7 +142,6 @@ class StudentPlayer(Player):
                     probs[i] = 0.0
             s = sum(total) / (len(probs) - len(total))
             probs = [p + s if p != 0 else p for p in probs]
-                    
 
         intervals = [sum(probs[:idx]) for idx in range(1, len(probs) + 1)]
         r = random.uniform(0, 1)
@@ -225,15 +218,18 @@ class StudentPlayer(Player):
             # Update values on table
             reward = 0
             if self.action == 's':
-                reward = 0.015 if self.result == 1 else -0.015
-            elif self.action == 'h' or (self.turn == 1 and self.action == 'd'):
-                if self.action == 'd':
-                    self.good_dd += 1 if self.result == 1 else 0
-                    self.dd += 1
+                reward = 0.015 if self.result == 1 else 0
+            elif self.action == 'h':
+                reward += 0.002 if self.result > 0 else 0
+                reward += 0.013 if self.result == 1 else 0
+            elif self.action == 'd':
+                self.good_dd += 1 if self.result == 1 else 0
+                self.dd += 1
                 reward += 0.002 if self.result > 0 else 0
                 reward += 0.013 if self.result == 1 else 0
             elif self.action == 'u':
-                if self.state[0] > 10:
+                ace = len([c for c in self.player_hand if c.is_ace()])
+                if self.state[0] > 10 and ace == 0:
                     if self.state[1] <= 21 and self.state[0] < self.state[1]:
                         reward += 0.005 if self.p_bust() > self.bust_threshold else 0
             reward = -0.015 if reward == 0 else reward
