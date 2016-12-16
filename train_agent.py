@@ -9,7 +9,8 @@ def main():
         configs = json.load(data_file)
 
     table_name = configs['table_name']
-    conn.execute('DROP TABLE IF EXISTS [' + table_name + ']')
+    if configs['drop_table']:
+        conn.execute('DROP TABLE IF EXISTS [' + table_name + ']')
     table_query = 'CREATE TABLE [' + table_name + '] (' + \
         '[StateID]          INTEGER PRIMARY KEY AUTOINCREMENT,' + \
         '[PlayerPoints]     INTEGER NOT NULL,' + \
@@ -19,12 +20,12 @@ def main():
         '[PlayerAce]        INTEGER NOT NULL,' + \
         '[Stand]            INTEGER NOT NULL,' + \
         '[Hit]              INTEGER NOT NULL,' + \
-        '[Games]            INTEGER NOT NULL);'
+        '[Defeats]          INTEGER NOT NULL);'
     conn.execute(table_query)
-    states = [(pp, dp, sh, ft, pa, 1, 1, 2) for pp in range(3, 22) \
+    states = [(pp, dp, sh, ft, pa, 0, 0, 0) for pp in range(3, 22) \
             for dp in range(2, 22) for sh in [0, 1] for ft in [0, 1] for pa in [0, 1]]
     states_query = 'INSERT OR IGNORE INTO ' + table_name + \
-        ' (PlayerPoints, DealerPoints, SoftHand, FirstTurn, PlayerAce, Stand, Hit, Games)' + \
+        ' (PlayerPoints, DealerPoints, SoftHand, FirstTurn, PlayerAce, Stand, Hit, Defeats)' + \
         ' VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     conn.executemany(states_query, states)
     conn.commit()

@@ -1,1 +1,11 @@
-{"n_tests": 1000, "n_games": 100000, "table_name": "StateAction100k_NewSystem", "create": false, "min_threshold": 0.02, "pocket": 1000, "bust_threshold": 0.5, "probs_threshold": 0.05}
+{
+    "n_tests": 1000, 
+    "n_games": 500000, 
+    "table_name": "StateAction500k",
+    "drop_table": false,
+    "create": true, 
+    "min_threshold": 0.02, 
+    "pocket": 1000, 
+    "bust_threshold": 0.5, 
+    "probs_threshold": 0.05
+}

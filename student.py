@@ -39,11 +39,11 @@ class StudentPlayer(Player):
         # Create tables to save state-action average rewards
         self.table_name = configs['table_name']
         self.conn = sqlite3.connect('tables.sqlite')
-        self.get_prob_query = 'SELECT StateID, Stand, Hit, Games ' + \
+        self.get_prob_query = 'SELECT StateID, Stand, Hit, Defeats ' + \
                 'FROM ' + self.table_name + ' WHERE PlayerPoints=? ' + \
                 'AND DealerPoints=? AND SoftHand=? AND FirstTurn=? AND PlayerAce=?'
         self.update_prob_query = 'UPDATE ' + self.table_name + \
-                ' SET Stand=?, Hit=?, Games=? ' + \
+                ' SET Stand=?, Hit=?, Defeats=? ' + \
                 'WHERE StateID=?'
         self.db_counter = 500000
         self.bust_threshold = configs['bust_threshold']
@@ -105,21 +105,18 @@ class StudentPlayer(Player):
         elif player_ace == 1:
             soft_hand = int(player_sum == self.player_value)
 
-        state = (self.player_value, self.dealer_value, soft_hand, self.turn == 1, player_ace > 0)            
-
-        self.state = state
-
+        self.state = (self.player_value, self.dealer_value, soft_hand, self.turn == 1, player_ace > 0)
         # Access table and search for the best probability based on state-action
         self.states_query = list(self.conn.execute(self.get_prob_query, (self.state)).fetchall()[0])
-        games = self.states_query[1:]
-        wins = games[:-1]
+        wins = self.states_query[1:-1]
+        defeats = self.states_query[-1]
         #print(self.state)
         #print(games)
         #print(sum(wins)/games[-1])
         if sum(wins) == 0:
             probs = [0.5, 0.5]
         else:
-            probs = [g / sum(wins) for g in wins]
+            probs = [a / sum(wins) for a in wins]
         
         #if self.disable_dd and self.turn == 1:
         #    probs = [(games[i] + games[-1]) / sum(games) if i == 1 else games[i] / sum(games) \
@@ -209,16 +206,14 @@ class StudentPlayer(Player):
         self.good_dd += 1 if not self.create and self.result == 1 and self.action == 'd' else 0
         
         # Just change the table while learning else read only
-        if self.create and self.turn > 0:
+        if self.create:
             # Update values on table
-            reward = 0
-            if self.action == 's' or self.action == 'h':
-                reward = 1 if self.result == 1 else 0
-
             for query, action in self.queries:
                 games = self.states_query[1:]
-                games[self.plays.index(action)] += reward
-                games[-1] += 1
+                if self.result == 1:
+                    games[self.plays.index(action)] += 1
+                elif self.result == 0:
+                    games[-1] += 1
                 query = games + [self.states_query[0]]
                 self.conn.execute(self.update_prob_query, (query))
 
