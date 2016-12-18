@@ -1,11 +1,11 @@
 {
-    "n_tests": 10000, 
+    "n_tests": 5000, 
     "n_games": 1000000, 
-    "table_name": "StateAction1M", 
-    "create": false, 
-    "min_threshold": 0.02, 
-    "pocket": 10000, 
-    "bust_threshold": 0.45, 
+    "table_name": "StateAction", 
+    "create": false,
+    "min_threshold": 0.0225, 
+    "pocket": 100, 
+    "bust_threshold": 0.55, 
     "probs_threshold": 0.05,
     "dealer_threshold": 0.76
 }

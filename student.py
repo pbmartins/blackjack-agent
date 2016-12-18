@@ -240,14 +240,14 @@ class StudentPlayer(Player):
                 reward += 0.013 if self.result == 1 else 0
             elif self.action == 'd':
                 if self.player_value < 22: 
-                    reward += 0.005 if self.result == 1 else 0
+                    reward += 0.0075 if self.result == 1 else 0
                     if self.state[2] == 0: # Hard hand
                         if self.state[0] >= 9 and self.state[0] <= 11:
                             reward += 0.015 if self.result == 1 else 0
                     else:
                         if self.state[0] >= 13 and self.state[0] <= 18:
                             reward += 0.015 if self.result == 1 else 0
-                reward += 0.005 if self.result == 1 else 0
+                #reward += 0.005 if self.result == 1 else 0
             elif self.action == 'u':
                 if self.state[0] > 14 and self.state[2] == 0:
                     dealer_value = card.value(self.dealer_hand)
