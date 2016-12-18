@@ -20,8 +20,10 @@ class StudentPlayer(Player):
         self.plays = ['s', 'h', 'u', 'd']
      
         # Wallet 
-        self.loans = [0.50, 0.25, 0.13]
+        self.loans = [0.50, 0.25, 0.125]
         self.my_pocket = self.pocket
+        self.init = self.pocket
+        self.first_wallet = True
         self.initial_wallet = self.wallet = int(self.my_pocket * self.loans[0])
         self.my_pocket -= self.initial_wallet
 
@@ -47,7 +49,6 @@ class StudentPlayer(Player):
                 'WHERE StateID=?'
         self.bust_threshold = configs['bust_threshold']
         self.probs_threshold = configs['probs_threshold']
-        self.dealer_threshold = configs['dealer_threshold']
 
         # Ignore rewards
         self.min_threshold = configs['min_threshold']
@@ -58,18 +59,20 @@ class StudentPlayer(Player):
         self.action = None
         self.state = None
         self.turn = 0
-      
-        return True
+        #print(self.initial_wallet)
         if self.create:
             return True
 
+        #if self.pocket > self.init + 100:
+        #    return False
         # Get a loan
         if not self.wallet or self.wallet < (2 * rules.min_bet):
             if len(self.loans) > 1:
-                self.initial_wallet = int(self.loans[1])
+                self.initial_wallet = int(self.my_pocket * self.loans[1])
                 self.wallet += self.initial_wallet
                 self.my_pocket -= self.initial_wallet
                 self.loans = self.loans[1:]
+                self.first_wallet = False
                 return True
             else:
                 self.dont_play += 1 
@@ -77,8 +80,10 @@ class StudentPlayer(Player):
                 if self.games_left == 0:
                     self.end()
                 return False
-        # Transfer founds
-        elif self.wallet > (self.initial_wallet * 1.15):
+        # Transfer funds
+        elif self.wallet > (self.initial_wallet * 1.2):
+            #if self.first_wallet:
+            #    return False
             self.my_pocket += self.wallet - self.initial_wallet
             self.wallet = self.initial_wallet
             return True
@@ -88,7 +93,6 @@ class StudentPlayer(Player):
     def play(self, dealer, players):
         # Get player hand
         self.player_hand = [p.hand for p in players if p.player.name == self.name][0]
-        self.dealer_hand = dealer.hand
 
         # Increment turn
         self.turn += 1
@@ -97,11 +101,13 @@ class StudentPlayer(Player):
         self.player_value = card.value(self.player_hand)
         self.dealer_value = card.value(dealer.hand)
 
-        # Soft hand - an ace as 11
-        # Hard hand - ace as 1
         player_ace = len([c for c in self.player_hand if c.is_ace()])
         player_sum = sum([c.value() for c in self.player_hand])
-        soft_hand = int(player_sum != self.player_value)
+        soft_hand = 0
+        if player_ace > 1:
+            soft_hand = 1
+        elif player_ace == 1:
+            soft_hand = int(player_sum == self.player_value)
 
         state = (self.player_value, self.dealer_value, soft_hand, self.turn == 1)
 
@@ -151,17 +157,10 @@ class StudentPlayer(Player):
             idx += 1
 
         self.action = self.plays[idx]
-        
-        if self.action == 'd':
-            self.dd += 1
-            if not self.create and probs[self.plays.index('d')] < 0.85:
-                self.action == 'h'
-
         return self.action
 
     def bet(self, dealer, players): 
         self.disable_dd = False
-
         self.bet_value = 2
         return self.bet_value
         if self.create:
@@ -169,14 +168,18 @@ class StudentPlayer(Player):
             return self.bet_value
 
         # Compute bet
-        if self.wallet >= (self.initial_wallet * 0.50):
-            self.bet_value = int(self.wallet * 0.06)
+        if self.wallet >= (self.initial_wallet * 0.75):
+            self.bet_value = int(self.wallet * 0.05)
+            #print("sup")
         elif self.wallet >= (self.initial_wallet * 0.10):
+            #print("inf")
             self.bet_value = int(self.wallet * 0.03)
         else:
             self.bet_value = self.rules.min_bet
             self.disable_dd = True
         
+        #print(self.wallet)
+        #print(self.bet_value)
         # Normalize values
         if self.bet_value > self.rules.max_bet:
             self.bet_value = self.rules.max_bet
@@ -188,10 +191,10 @@ class StudentPlayer(Player):
 
         return self.bet_value
     
-    def p_bust(self, player_hand, limit):
+    def p_bust(self):
         all_cards = [card.Card(rank=r) for r in range(1, 14)]
-        scenarios = [card.value(player_hand + [c]) for c in all_cards]
-        return len([v for v in scenarios if limit(v)]) / len(scenarios)
+        scenarios = [card.value(self.player_hand + [c]) for c in all_cards]
+        return len([v for v in scenarios if v > 21]) / len(scenarios)
     
     def adjust_probs(self, reward):
         probs = self.states_query[1:] if self.states_query[-1] != 0 else self.states_query[1:-1]
@@ -207,10 +210,6 @@ class StudentPlayer(Player):
             self.conn.execute(self.update_prob_query, (new_values))
             #self.conn.commit()
 
-    def show(self, players):
-        self.dealer_hand = players[0].hand
-        self.player_hand = [p.hand for p in players if p.player.name == self.name][0]
-
     def payback(self, prize):
         self.result = 0
         if prize > 0:
@@ -225,44 +224,28 @@ class StudentPlayer(Player):
         self.defeats += 1 if self.result == 0 else 0
         self.draws += 1 if self.result == 0.5 else 0
         self.surrenders += 1 if self.result == 0.25 else 0
-        
-        if self.action == 'd' and self.result == 1:
-            self.good_dd += 1
+        if self.action == 'd':
+            self.good_dd += 1 if not self.create and self.result == 1 else 0
+            self.dd += 1 if not self.create else 0
         # Just change the table while learning else read only
         if self.create and self.turn > 0:
-            player_value = card.value(self.player_hand)
             # Update values on table
             reward = 0
             if self.action == 's':
                 reward = 0.015 if self.result == 1 else 0
             elif self.action == 'h':
-                reward += 0.002 if player_value < 22 else 0
+                reward += 0.002 if self.result > 0 else 0
                 reward += 0.013 if self.result == 1 else 0
             elif self.action == 'd':
-                if self.player_value < 22: 
-                    reward += 0.005 if self.result == 1 else 0
-                    if self.state[2] == 0: # Hard hand
-                        if self.state[0] >= 9 and self.state[0] <= 11:
-                            reward += 0.015 if self.result == 1 else 0
-                    else:
-                        if self.state[0] >= 13 and self.state[0] <= 18:
-                            reward += 0.015 if self.result == 1 else 0
-                reward += 0.005 if self.result == 1 else 0
+                self.good_dd += 1 if self.result == 1 else 0
+                self.dd += 1
+                reward += 0.002 if self.result > 0 else 0
+                reward += 0.013 if self.result == 1 else 0
             elif self.action == 'u':
-                if self.state[0] > 14 and self.state[2] == 0:
-                    dealer_value = card.value(self.dealer_hand)
-                    if dealer_value <= 21 and dealer_value > self.player_value:
-                        #print(self.player_hand)
-                        #print(self.dealer_hand)
-                        #print(self.p_bust(self.player_hand, \
-                        #        lambda v: v > 21 or v < dealer_value))
-                        reward += 0.005 if self.p_bust(self.player_hand, \
-                                lambda v: v > 21 or v < dealer_value) > self.dealer_threshold else 0
-
-                #if self.state[0] > 10 and self.p_bust(self.dealer_hand, \
-                #        lambda v: v > self.state[0] and v <= 21) > self.dealer_threshold:
-                #    reward += 0.005 if self.p_bust(self.player_hand, \
-                #            lambda v: v > 21) > self.bust_threshold else 0
+                ace = len([c for c in self.player_hand if c.is_ace()])
+                if self.state[0] > 10 and ace == 0:
+                    if self.state[1] <= 21 and self.state[0] < self.state[1]:
+                        reward += 0.005 if self.p_bust() > self.bust_threshold else 0
             reward = -0.015 if reward == 0 else reward
                 
             # Adjust probabilities with new values based on reward
@@ -276,6 +259,11 @@ class StudentPlayer(Player):
         self.wallet += prize
         self.games_left -= 1
 
+        if self.total_games - self.games_left == 200:
+            print("% of victories: " + str(self.wins/200))
+            print("% of defeats: " + str(self.defeats/200))
+            print("% of draws: " + str(self.draws/200))
+
         if self.games_left == 0:
             self.end()
 
@@ -283,19 +271,11 @@ class StudentPlayer(Player):
         self.conn.commit()
         self.my_pocket += self.wallet
         self.initial_wallet = self.wallet = 0
-        print("Number of victories: " + str(self.wins) + ", " \
-                + str(self.wins/(self.total_games-self.dont_play)*100) + "%")
-        print("Number of defeats: " + str(self.defeats) + ", " \
-                + str(self.defeats/(self.total_games-self.dont_play)*100) + "%")
-        print("Number of draws: " + str(self.draws) + ", " \
-                + str(self.draws/(self.total_games-self.dont_play)*100) + "%")
-        print("Number of surrenders: " + str(self.surrenders) + ", " \
-                + str(self.surrenders/(self.total_games-self.dont_play)*100) + "%")
-        print("Number of games passed: " + str(self.dont_play) + ", " \
-                + str(self.dont_play/self.total_games*100) + "%")
-        print("Number of double downs: " + str(self.dd) + ", " \
-                + str(self.dd/(self.total_games-self.dont_play)*100) + "%")
-        print("Number of good dds: " + str(self.good_dd) + ", " \
-                + str(self.good_dd/self.dd*100) + "%")
-        print("-------------------------------")
+        print("Number of victories: " + str(self.wins))
+        print("Number of defeats: " + str(self.defeats))
+        print("Number of draws: " + str(self.draws))
+        print("Number of surrenders: " + str(self.surrenders))
+        print("Number of games passed: " + str(self.dont_play))
+        print("Number of double downs: " + str(self.dd))
+        print("Number of good dds: " + str(self.good_dd))
 
