@@ -11,6 +11,9 @@ class RandomPlayer(Player):
     def __init__(self, name="RandomPlayer", money=0):
         super(RandomPlayer, self).__init__(name, money)
 
+    def want_to_play(self, rules):     #if you have to much money and jut want to watch, return False
+        return True
+
     def play(self, dealer, players):
         """ Calculates decision to take
             Must be either "h" or "s"

@@ -4,8 +4,8 @@
     "table_name": "StateAction1M", 
     "create": false, 
     "min_threshold": 0.02, 
-    "pocket": 10000, 
+    "pocket": 100, 
     "bust_threshold": 0.45, 
     "probs_threshold": 0.05,
-    "dealer_threshold": 0.76
+    "dealer_threshold": 0.7
 }

@@ -14,18 +14,22 @@ class StudentPlayer(Player):
         # Read json config file
         with open('settings.json') as data_file:    
             configs = dict(json.load(data_file))
-
+       
+        self.pocket = money
         self.create = configs['create']
         self.total_games = self.games_left = configs['n_games'] if self.create else configs['n_tests']
         self.plays = ['s', 'h', 'u', 'd']
      
         # Wallet 
         self.loans = [0.50, 0.25, 0.13]
+        self.initial_pocket = self.pocket
         self.my_pocket = self.pocket
         self.initial_wallet = self.wallet = int(self.my_pocket * self.loans[0])
         self.my_pocket -= self.initial_wallet
 
         self.disable_dd = False
+        self.bet_value = 2
+        self.result = 1
 
         # Counting stats
         self.wins = 0
@@ -41,7 +45,7 @@ class StudentPlayer(Player):
         self.conn = sqlite3.connect('tables.sqlite')
         self.get_prob_query = 'SELECT StateID, Stand, Hit, Surrender, DoubleDown ' + \
                 'FROM ' + self.table_name + ' WHERE PlayerPoints=? ' + \
-                'AND DealerPoints=? AND SoftHand=? AND FirstTurn=?'
+                'AND DealerPoints=? AND SoftHand=? AND PlayerAce=? AND FirstTurn=?'
         self.update_prob_query = 'UPDATE ' + self.table_name + \
                 ' SET Stand=?, Hit=?, Surrender=?, DoubleDown=? ' + \
                 'WHERE StateID=?'
@@ -59,14 +63,27 @@ class StudentPlayer(Player):
         self.state = None
         self.turn = 0
       
+        #return True
+        if self.pocket < 55 or self.pocket > 125:
+            self.dont_play += 1 
+            self.games_left -= 1
+            if self.games_left == 0:
+                self.end()
+            return False
         return True
         if self.create:
             return True
 
         # Get a loan
         if not self.wallet or self.wallet < (2 * rules.min_bet):
-            if len(self.loans) > 1:
-                self.initial_wallet = int(self.loans[1])
+            if self.my_pocket > self.initial_pocket * 1.25:
+                self.initial_wallet = int(self.initial_pocket * 0.5)
+                print("loan of " + str(self.initial_wallet))
+                self.wallet += self.initial_wallet
+                self.my_pocket -= self.initial_wallet
+            elif len(self.loans) > 1:
+                self.initial_wallet = int(self.initial_pocket * self.loans[1])
+                print("loan of " + str(self.initial_wallet))
                 self.wallet += self.initial_wallet
                 self.my_pocket -= self.initial_wallet
                 self.loans = self.loans[1:]
@@ -79,8 +96,15 @@ class StudentPlayer(Player):
                 return False
         # Transfer founds
         elif self.wallet > (self.initial_wallet * 1.15):
+            #print("initial_wallet: " + str(self.initial_wallet))
+            #print("before my_pocket: " + str(self.my_pocket))
+            #print("before wallet: " + str(self.wallet))
             self.my_pocket += self.wallet - self.initial_wallet
             self.wallet = self.initial_wallet
+            #print("after general_pocket: " + str(self.pocket))
+            #print("after my_pocket: " + str(self.my_pocket))
+            #print("after wallet: " + str(self.wallet))
+            #print("------------------")
             return True
         
         return True
@@ -103,7 +127,7 @@ class StudentPlayer(Player):
         player_sum = sum([c.value() for c in self.player_hand])
         soft_hand = int(player_sum != self.player_value)
 
-        state = (self.player_value, self.dealer_value, soft_hand, self.turn == 1)
+        state = (self.player_value, self.dealer_value, soft_hand, player_ace > 0, self.turn == 1)
 
         # Update last query
         reward = 0
@@ -154,8 +178,6 @@ class StudentPlayer(Player):
         
         if self.action == 'd':
             self.dd += 1
-            if not self.create and probs[self.plays.index('d')] < 0.85:
-                self.action == 'h'
 
         return self.action
 
@@ -168,14 +190,21 @@ class StudentPlayer(Player):
             self.bet_value = 2
             return self.bet_value
 
+        print("passou aqui")
+        print(self.games_left)
         # Compute bet
-        if self.wallet >= (self.initial_wallet * 0.50):
-            self.bet_value = int(self.wallet * 0.06)
-        elif self.wallet >= (self.initial_wallet * 0.10):
-            self.bet_value = int(self.wallet * 0.03)
-        else:
-            self.bet_value = self.rules.min_bet
-            self.disable_dd = True
+        if self.result == 1:
+            self.bet_value += 1
+        elif self.result == 0:
+            self.bet_value = int(self.bet_value / 2)
+
+        #if self.wallet >= (self.initial_wallet * 0.50):
+        #    self.bet_value = int(self.wallet * 0.06)
+        #elif self.wallet >= (self.initial_wallet * 0.10):
+        #    self.bet_value = int(self.wallet * 0.03)
+        #else:
+        #    self.bet_value = self.rules.min_bet
+        #    self.disable_dd = True
         
         # Normalize values
         if self.bet_value > self.rules.max_bet:
@@ -245,7 +274,7 @@ class StudentPlayer(Player):
                         if self.state[0] >= 9 and self.state[0] <= 11:
                             reward += 0.015 if self.result == 1 else 0
                     else:
-                        if self.state[0] >= 13 and self.state[0] <= 18:
+                        if self.state[0] >= 14 and self.state[0] <= 18:
                             reward += 0.015 if self.result == 1 else 0
                 reward += 0.005 if self.result == 1 else 0
             elif self.action == 'u':

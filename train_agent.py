@@ -15,6 +15,7 @@ def main():
         '[PlayerPoints]     INTEGER NOT NULL,' + \
         '[DealerPoints]     INTEGER NOT NULL,' + \
         '[SoftHand]         INTEGER NOT NULL,' + \
+        '[PlayerAce]        INTEGER NOT NULL,' + \
         '[FirstTurn]        INTEGER NOT NULL,' + \
         '[Stand]            REAL NOT NULL,' + \
         '[Hit]              REAL NOT NULL,' + \
@@ -23,11 +24,11 @@ def main():
     conn.execute(table_query)
     p = lambda ft: 0.25 if ft == 1 else 1/3
     dd = lambda ft: 0.25 if ft == 1 else 0
-    states = [(pp, dp, sh, ft, p(ft), p(ft), p(ft), dd(ft)) for pp in range(3, 22) \
-            for dp in range(2, 22) for sh in [0, 1] for ft in [0, 1]]
+    states = [(pp, dp, sh, pa, ft, p(ft), p(ft), p(ft), dd(ft)) for pp in range(3, 22) \
+            for dp in range(2, 22) for sh in [0, 1] for pa in [0, 1] for ft in [0, 1]]
     states_query = 'INSERT OR IGNORE INTO ' + table_name + \
-        ' (PlayerPoints, DealerPoints, SoftHand, FirstTurn, Stand, Hit, Surrender, DoubleDown)' + \
-        ' VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        ' (PlayerPoints, DealerPoints, SoftHand, PlayerAce, FirstTurn, Stand, Hit, Surrender, DoubleDown)' + \
+        ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
     conn.executemany(states_query, states)
     conn.commit()
 
