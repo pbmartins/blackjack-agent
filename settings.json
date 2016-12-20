@@ -1,5 +1,5 @@
 {
-    "n_tests": 10000, 
+    "n_tests": 5000, 
     "n_games": 1000000, 
     "table_name": "StateAction1M", 
     "create": false, 

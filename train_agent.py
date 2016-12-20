@@ -7,7 +7,10 @@ def main():
     # Read json config file
     with open('settings.json') as data_file:    
         configs = json.load(data_file)
-
+    
+    if not configs['create']:
+        print("!! YOU ARE NOT IN TRAIN MODE !!")
+        return
     table_name = configs['table_name']
     conn.execute('DROP TABLE IF EXISTS [' + table_name + ']')
     table_query = 'CREATE TABLE [' + table_name + '] (' + \
