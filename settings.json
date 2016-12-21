@@ -3,9 +3,8 @@
     "n_games": 1000000, 
     "table_name": "StateAction1M", 
     "create": false, 
-    "min_threshold": 0.02, 
+    "min_threshold": 0.0225, 
     "pocket": 100, 
-    "bust_threshold": 0.45, 
-    "probs_threshold": 0.05,
+    "probs_threshold": 0.0,
     "dealer_threshold": 0.7
 }

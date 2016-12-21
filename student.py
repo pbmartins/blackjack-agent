@@ -1,4 +1,8 @@
 #encoding: utf8
+
+# Diogo Ferreira 76425
+# Pedro Martins 76551
+
 import card
 import random
 import numpy
@@ -20,14 +24,6 @@ class StudentPlayer(Player):
         self.total_games = self.games_left = configs['n_games'] if self.create else configs['n_tests']
         self.plays = ['s', 'h', 'u', 'd']
      
-        # Wallet 
-        self.loans = [0.50, 0.25, 0.13]
-        self.initial_pocket = self.pocket
-        self.my_pocket = self.pocket
-        self.initial_wallet = self.wallet = int(self.my_pocket * self.loans[0])
-        self.my_pocket -= self.initial_wallet
-
-        self.disable_dd = False
         self.bet_value = 2
         self.result = 1
 
@@ -49,13 +45,11 @@ class StudentPlayer(Player):
         self.update_prob_query = 'UPDATE ' + self.table_name + \
                 ' SET Stand=?, Hit=?, Surrender=?, DoubleDown=? ' + \
                 'WHERE StateID=?'
-        self.bust_threshold = configs['bust_threshold']
         self.probs_threshold = configs['probs_threshold']
         self.dealer_threshold = configs['dealer_threshold']
 
         # Ignore rewards
         self.min_threshold = configs['min_threshold']
-
 
     def want_to_play(self, rules):
         self.rules = rules
@@ -63,51 +57,32 @@ class StudentPlayer(Player):
         self.state = None
         self.turn = 0
       
-        #return True
-        if self.pocket < 55 or self.pocket > 125:
-            self.dont_play += 1 
-            self.games_left -= 1
-            if self.games_left == 0:
-                self.end()
-            return False
         return True
-        if self.create:
-            return True
-
-        # Get a loan
-        if not self.wallet or self.wallet < (2 * rules.min_bet):
-            if self.my_pocket > self.initial_pocket * 1.25:
-                self.initial_wallet = int(self.initial_pocket * 0.5)
-                print("loan of " + str(self.initial_wallet))
-                self.wallet += self.initial_wallet
-                self.my_pocket -= self.initial_wallet
-            elif len(self.loans) > 1:
-                self.initial_wallet = int(self.initial_pocket * self.loans[1])
-                print("loan of " + str(self.initial_wallet))
-                self.wallet += self.initial_wallet
-                self.my_pocket -= self.initial_wallet
-                self.loans = self.loans[1:]
-                return True
-            else:
-                self.dont_play += 1 
-                self.games_left -= 1
-                if self.games_left == 0:
-                    self.end()
-                return False
-        # Transfer founds
-        elif self.wallet > (self.initial_wallet * 1.15):
-            #print("initial_wallet: " + str(self.initial_wallet))
-            #print("before my_pocket: " + str(self.my_pocket))
-            #print("before wallet: " + str(self.wallet))
-            self.my_pocket += self.wallet - self.initial_wallet
-            self.wallet = self.initial_wallet
-            #print("after general_pocket: " + str(self.pocket))
-            #print("after my_pocket: " + str(self.my_pocket))
-            #print("after wallet: " + str(self.wallet))
-            #print("------------------")
-            return True
+    
+    def bet(self, dealer, players): 
         
-        return True
+        self.bet_value = 2 * self.rules.min_bet
+        return self.bet_value
+        
+        """
+        Exponential Wallet -> Fixed bet works better
+        
+        # Compute bet
+        if self.action == 'd':
+            return self.bet_value
+
+        if self.result == 1:
+            self.bet_value += self.rules.min_bet
+        elif self.result == 0:
+            self.bet_value = int(self.bet_value / (2 * self.rules.min_bet))
+
+        # Normalize values
+        if self.bet_value > self.rules.max_bet:
+            self.bet_value = self.rules.max_bet
+        elif self.bet_value < (2 * self.rules.min_bet):
+            self.bet_value = 2 * self.rules.min_bet
+        return self.bet_value
+        """
 
     def play(self, dealer, players):
         # Get player hand
@@ -153,10 +128,7 @@ class StudentPlayer(Player):
         self.states_query = list(self.conn.execute(self.get_prob_query, (self.state)).fetchall()[0])
         probs = self.states_query[1:]
         
-        if self.disable_dd and self.turn == 1:
-            probs[1] += probs[3]
-            probs[-1:] = []
-
+        # See the best probs
         if not self.create:
             max_prob = max(probs)
             max_idx = probs.index(max_prob)
@@ -175,66 +147,32 @@ class StudentPlayer(Player):
             idx += 1
 
         self.action = self.plays[idx]
-        
-        if self.action == 'd':
-            self.dd += 1
 
         return self.action
-
-    def bet(self, dealer, players): 
-        self.disable_dd = False
-
-        self.bet_value = 2
-        return self.bet_value
-        if self.create:
-            self.bet_value = 2
-            return self.bet_value
-
-        print("passou aqui")
-        print(self.games_left)
-        # Compute bet
-        if self.result == 1:
-            self.bet_value += 1
-        elif self.result == 0:
-            self.bet_value = int(self.bet_value / 2)
-
-        #if self.wallet >= (self.initial_wallet * 0.50):
-        #    self.bet_value = int(self.wallet * 0.06)
-        #elif self.wallet >= (self.initial_wallet * 0.10):
-        #    self.bet_value = int(self.wallet * 0.03)
-        #else:
-        #    self.bet_value = self.rules.min_bet
-        #    self.disable_dd = True
-        
-        # Normalize values
-        if self.bet_value > self.rules.max_bet:
-            self.bet_value = self.rules.max_bet
-        elif self.bet_value < self.rules.min_bet:
-            self.bet_value = self.rules.min_bet
-        
-        # Bet shouldn't be less than 2 so that we can earn money from surrender
-        self.bet_value = 2 if self.bet_value < 2 else self.bet_value
-
-        return self.bet_value
     
     def p_bust(self, player_hand, limit):
         all_cards = [card.Card(rank=r) for r in range(1, 14)]
         scenarios = [card.value(player_hand + [c]) for c in all_cards]
         return len([v for v in scenarios if limit(v)]) / len(scenarios)
-    
+   
     def adjust_probs(self, reward):
         probs = self.states_query[1:] if self.states_query[-1] != 0 else self.states_query[1:-1]
         max_threshold = 1.0 - self.min_threshold * (len(probs) - 1)
-        if min(probs) >= self.min_threshold and max(probs) <= max_threshold:
-            up = reward
-            down = -reward / (len(probs) - 1)
-            action_idx = self.plays.index(self.action)
-            new_values = [probs[i] + up if i == action_idx else probs[i] + down \
-                    for i in range(len(probs))]
-            new_values += [0, self.states_query[0]] \
-                    if len(new_values) < 4 else [self.states_query[0]]
-            self.conn.execute(self.update_prob_query, (new_values))
-            #self.conn.commit()
+        action_idx = self.plays.index(self.action)
+        action_prob = probs[action_idx]
+        if reward > 0 and ((action_prob > max_threshold) or \
+               (min(probs) < self.min_threshold and min(probs) != action_prob)):
+            return
+        if reward < 0 and ((action_prob < self.min_threshold) or \
+                (max(probs) > max_threshold and max(probs) != action_prob)):
+            return
+        up = reward
+        down = -reward / (len(probs) - 1)
+        new_values = [probs[i] + up if i == action_idx else probs[i] + down \
+                for i in range(len(probs))]
+        new_values += [0, self.states_query[0]] \
+                if len(new_values) < 4 else [self.states_query[0]]
+        self.conn.execute(self.update_prob_query, (new_values))
 
     def show(self, players):
         self.dealer_hand = players[0].hand
@@ -254,9 +192,9 @@ class StudentPlayer(Player):
         self.defeats += 1 if self.result == 0 else 0
         self.draws += 1 if self.result == 0.5 else 0
         self.surrenders += 1 if self.result == 0.25 else 0
-        
-        if self.action == 'd' and self.result == 1:
-            self.good_dd += 1
+        self.dd += 1 if self.action == 'd' else 0
+        self.good_dd += 1 if self.action == 'd' and self.result == 1 else 0
+
         # Just change the table while learning else read only
         if self.create and self.turn > 0:
             player_value = card.value(self.player_hand)
@@ -276,22 +214,12 @@ class StudentPlayer(Player):
                     else:
                         if self.state[0] >= 14 and self.state[0] <= 18:
                             reward += 0.015 if self.result == 1 else 0
-                #reward += 0.005 if self.result == 1 else 0
             elif self.action == 'u':
                 if self.state[0] > 14 and self.state[2] == 0:
                     dealer_value = card.value(self.dealer_hand)
                     if dealer_value <= 21 and dealer_value > self.player_value:
-                        #print(self.player_hand)
-                        #print(self.dealer_hand)
-                        #print(self.p_bust(self.player_hand, \
-                        #        lambda v: v > 21 or v < dealer_value))
                         reward += 0.005 if self.p_bust(self.player_hand, \
                                 lambda v: v > 21 or v < dealer_value) > self.dealer_threshold else 0
-
-                #if self.state[0] > 10 and self.p_bust(self.dealer_hand, \
-                #        lambda v: v > self.state[0] and v <= 21) > self.dealer_threshold:
-                #    reward += 0.005 if self.p_bust(self.player_hand, \
-                #            lambda v: v > 21) > self.bust_threshold else 0
             reward = -0.015 if reward == 0 else reward
                 
             # Adjust probabilities with new values based on reward
@@ -302,7 +230,6 @@ class StudentPlayer(Player):
         # Update game values
         self.table = 0
         self.pocket += prize
-        self.wallet += prize
         self.games_left -= 1
 
         if self.games_left == 0:
@@ -310,8 +237,8 @@ class StudentPlayer(Player):
 
     def end(self):
         self.conn.commit()
-        self.my_pocket += self.wallet
-        self.initial_wallet = self.wallet = 0
+        # Print stats
+        """
         print("Number of victories: " + str(self.wins) + ", " \
                 + str(self.wins/(self.total_games-self.dont_play)*100) + "%")
         print("Number of defeats: " + str(self.defeats) + ", " \
@@ -320,11 +247,10 @@ class StudentPlayer(Player):
                 + str(self.draws/(self.total_games-self.dont_play)*100) + "%")
         print("Number of surrenders: " + str(self.surrenders) + ", " \
                 + str(self.surrenders/(self.total_games-self.dont_play)*100) + "%")
-        print("Number of games passed: " + str(self.dont_play) + ", " \
-                + str(self.dont_play/self.total_games*100) + "%")
         print("Number of double downs: " + str(self.dd) + ", " \
                 + str(self.dd/(self.total_games-self.dont_play)*100) + "%")
         print("Number of good dds: " + str(self.good_dd) + ", " \
                 + str(self.good_dd/self.dd*100) + "%")
         print("-------------------------------")
+        """
 
