@@ -11,24 +11,26 @@ def main():
     table_name = configs['table_name']
     if configs['drop_table']:
         conn.execute('DROP TABLE IF EXISTS [' + table_name + ']')
-    table_query = 'CREATE TABLE [' + table_name + '] (' + \
-        '[StateID]          INTEGER PRIMARY KEY AUTOINCREMENT,' + \
-        '[PlayerPoints]     INTEGER NOT NULL,' + \
-        '[DealerPoints]     INTEGER NOT NULL,' + \
-        '[SoftHand]         INTEGER NOT NULL,' + \
-        '[FirstTurn]        INTEGER NOT NULL,' + \
-        '[PlayerAce]        INTEGER NOT NULL,' + \
-        '[Stand]            INTEGER NOT NULL,' + \
-        '[Hit]              INTEGER NOT NULL,' + \
-        '[Defeats]          INTEGER NOT NULL);'
-    conn.execute(table_query)
-    states = [(pp, dp, sh, ft, pa, 0, 0, 0) for pp in range(3, 22) \
-            for dp in range(2, 22) for sh in [0, 1] for ft in [0, 1] for pa in [0, 1]]
-    states_query = 'INSERT OR IGNORE INTO ' + table_name + \
-        ' (PlayerPoints, DealerPoints, SoftHand, FirstTurn, PlayerAce, Stand, Hit, Defeats)' + \
-        ' VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    conn.executemany(states_query, states)
-    conn.commit()
+        table_query = 'CREATE TABLE [' + table_name + '] (' + \
+            '[StateID]          INTEGER PRIMARY KEY AUTOINCREMENT,' + \
+            '[PlayerPoints]     INTEGER NOT NULL,' + \
+            '[DealerPoints]     INTEGER NOT NULL,' + \
+            '[SoftHand]         INTEGER NOT NULL,' + \
+            '[FirstTurn]        INTEGER NOT NULL,' + \
+            '[PlayerAce]        INTEGER NOT NULL,' + \
+            '[PlayStand]        INTEGER NOT NULL,' + \
+            '[PlayHit]          INTEGER NOT NULL,' + \
+            '[FinalStand]       INTEGER NOT NULL,' + \
+            '[FinalHit]         INTEGER NOT NULL,' + \
+            '[BadPlay]          INTEGER NOT NULL);'
+        conn.execute(table_query)
+        states = [(pp, dp, sh, ft, pa, 1, 1, 1, 1, 1) for pp in range(3, 22) \
+                for dp in range(2, 22) for sh in [0, 1] for ft in [0, 1] for pa in [0, 1]]
+        states_query = 'INSERT OR IGNORE INTO ' + table_name + \
+            ' (PlayerPoints, DealerPoints, SoftHand, FirstTurn, PlayerAce, PlayStand,' + \
+            'PlayHit, FinalStand, FinalHit, BadPlay) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        conn.executemany(states_query, states)
+        conn.commit()
 
     n_games = configs['n_games']
     print("Training agent with " + str(n_games)+ ":")

@@ -1,11 +1,14 @@
 {
-    "n_tests": 1000, 
-    "n_games": 500000, 
-    "table_name": "StateAction500k",
-    "drop_table": false,
-    "create": true, 
-    "min_threshold": 0.02, 
-    "pocket": 1000, 
-    "bust_threshold": 0.5, 
-    "probs_threshold": 0.05
+    "n_tests": 5000, 
+    "n_games": 1500000, 
+    "table_name": "StateAction5Mv2",
+    "drop_table": true,
+    "create": false, 
+    "pocket": 100, 
+    "bust_threshold": 0.55, 
+    "win_threshold": 0.45, 
+    "probs_threshold": 0.03,
+    "surrender_threshold": 0.35,
+    "use_dd_threshold": 0.27,
+    "dd_threshold": 0.5
 }
