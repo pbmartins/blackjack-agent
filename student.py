@@ -67,7 +67,6 @@ class StudentPlayer(Player):
         if self.create:
             return True
 
-        
         # Get a loan
         if not self.wallet or self.wallet < (2 * rules.min_bet):
             if len(self.loans) > 1:
@@ -200,13 +199,14 @@ class StudentPlayer(Player):
             self.bet_value = 2
             return self.bet_value
         
+        diff = self.rules.max_bet - self.rules.min_bet
         # Compute bet
         if self.action == 'd':
             self.bet_value = self.bet_value
         elif self.result < 0:
             self.bet_value = self.rules.min_bet
         else:
-            self.bet_value *= 2
+            self.bet_value += math.ceil(diff / 5)
 
         # Normalize values
         if self.bet_value > self.rules.max_bet:

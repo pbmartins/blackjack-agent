@@ -7,4 +7,5 @@ if __name__ == '__main__':
         configs = json.load(data_file)
     for i in range(10):
         print("Game " + str(i) + ":")
-        casino_main(n_games=configs['n_tests'], pocket=configs['pocket'])
+        casino_main(n_games=configs['n_tests'], pocket=configs['pocket'], \
+                min_bet=configs['min_bet'], max_bet=configs['max_bet'])
