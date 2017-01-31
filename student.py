@@ -21,11 +21,6 @@ class StudentPlayer(Player):
         self.plays = ['s', 'h', 'u', 'd']
      
         # Wallet 
-        self.loans = [0.50, 0.25, 0.125]
-        self.my_pocket = self.pocket
-        self.initial_wallet = self.wallet = int(self.my_pocket * self.loans[0])
-        self.my_pocket -= self.initial_wallet
-
         self.bet_value = 0
         self.result = 0
 
@@ -47,13 +42,13 @@ class StudentPlayer(Player):
         self.update_prob_query = 'UPDATE ' + self.table_name + \
                 ' SET PlayStand=?, PlayHit=?, FinalStand=?, FinalHit=?, BadPlay=? ' + \
                 'WHERE StateID=?'
-        self.db_counter = 500000
         self.bust_threshold = configs['bust_threshold']
         self.win_threshold = configs['win_threshold']
         self.probs_threshold = configs['probs_threshold']
         self.surrender_threshold = configs['surrender_threshold']
         self.use_dd_threshold = configs['use_dd_threshold']
         self.dd_threshold = configs['dd_threshold']
+        self.play_threshold = configs['play_threshold']
 
 
     def want_to_play(self, rules):
@@ -67,26 +62,16 @@ class StudentPlayer(Player):
         if self.create:
             return True
 
-        # Get a loan
-        if not self.wallet or self.wallet < (2 * rules.min_bet):
-            if len(self.loans) > 1:
-                self.initial_wallet = int(self.my_pocket * self.loans[1])
-                self.wallet += self.initial_wallet
-                self.my_pocket -= self.initial_wallet
-                self.loans = self.loans[1:]
-                return True
-            else:
-                self.dont_play += 1 
-                self.games_left -= 1
-                if self.games_left == 0:
-                    self.end()
-                return False
-        # Transfer founds
-        elif self.wallet > (self.initial_wallet * 1.5):
-            self.my_pocket += self.wallet - self.initial_wallet
-            self.wallet = self.initial_wallet
+        # Check if in the last 5% of the games we don't have money
+        # If not, we may give up to try not to lose more
+        if self.games_left > self.play_threshold * self.total_games or self.pocket > 0:
             return True
-        return True
+        else:
+            self.dont_play += 1
+            self.games_left -= 1
+            if self.games_left == 0:
+                self.end()
+            return False
 
     def prob_dealer_bust(self):
         all_cards = [card.Card(rank=r) for r in range(1, 14)]
@@ -204,6 +189,7 @@ class StudentPlayer(Player):
         if self.action == 'd':
             self.bet_value = self.bet_value
         elif self.result < 0:
+            #self.bet_value = int(self.bet_value / 4)
             self.bet_value = self.rules.min_bet
         else:
             self.bet_value += math.ceil(diff / 5)
@@ -214,7 +200,6 @@ class StudentPlayer(Player):
         elif self.bet_value < self.rules.min_bet:
             self.bet_value = self.rules.min_bet
         
-
         # Bet shouldn't be less than 2 so that we can earn money from surrender
         self.bet_value = 2 if self.bet_value < 2 else self.bet_value
 
@@ -293,7 +278,6 @@ class StudentPlayer(Player):
         # Update game values
         self.table = 0
         self.pocket += prize
-        self.wallet += prize
         self.games_left -= 1
 
         if self.games_left == 0:
@@ -301,8 +285,6 @@ class StudentPlayer(Player):
 
     def end(self):
         self.conn.commit()
-        self.my_pocket += self.wallet
-        self.initial_wallet = self.wallet = 0
         self.dd = 1 if self.dd == 0 else self.dd
         # Print stats
         
@@ -318,4 +300,6 @@ class StudentPlayer(Player):
                 + str(self.dd/(self.total_games-self.dont_play)*100) + "%")
         print("Number of good dds: " + str(self.good_dd) + ", " \
                 + str(self.good_dd/self.dd*100) + "%")
+        print("Number of not played games: " + str(self.dont_play) + ", " \
+                + str(self.dont_play/self.total_games*100) + "%")
         print("-------------------------------")
