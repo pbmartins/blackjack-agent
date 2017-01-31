@@ -12,7 +12,7 @@ The rules defined are basically the rules of common Blackjack, with some excepti
 
 ## Learning how to play
 
-In order to the agent to know how to play accordingly, it was used a "machine learning" like strategy.
+So that the agent can know how to play, it was used a "machine learning" like strategy.
 The agent starts with a table of states (PlayerPoints, DealerPoints, FirstTurn, SoftHand, PlayerHand, PlayStand, PlayHit, FinalStand, FinalHit, BadPlay), which are used fer each different play of the game. Next, we use:
 
     python3 train_agent.py
