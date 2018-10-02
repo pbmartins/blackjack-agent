@@ -51,7 +51,6 @@ class Game(object):
 
     def __init__(self, players, shoe_size=4, debug=False, verbose=True, min_bet=1, max_bet=10, shoe=None):
         if verbose:
-    #       print(chr(27) + "[2J")
             print("-"*80)
         self.verbose = verbose
         self.debug = debug
